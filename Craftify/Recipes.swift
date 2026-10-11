@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import CloudKit
 
 /// A complete package of recipes for a specific Minecraft version (.recipe file format)
 struct RecipePackage: Codable, Identifiable {
@@ -292,28 +291,21 @@ struct ConsoleCommand: Identifiable, Codable, Equatable {
         self.opLevelJava = opLevelJava
     }
 
-    /// Initialize from a CKRecord
-    init?(from record: CKRecord) {
-        guard
-            let name = record["name"] as? String,
-            let desc = record["description"] as? String
-        else {
-            return nil
-        }
-
-        self.id = record.recordID.recordName
-        self.name = name
-        self.description = desc
-
-        // Booleans stored as INT64
-        let bedrockValue = record["worksInBedrock"] as? Int64 ?? 0
-        self.worksInBedrock = (bedrockValue == 1)
-
-        let javaValue = record["worksInJava"] as? Int64 ?? 0
-        self.worksInJava = (javaValue == 1)
-
-        // Optional OP levels
-        self.opLevelBedrock = record["opLevelBedrock"] as? Int64
-        self.opLevelJava = record["opLevelJava"] as? Int64
-    }
+    static let defaultCommands: [ConsoleCommand] = [
+        ConsoleCommand(name: "/gamemode", description: "Sets a player's game mode (survival, creative, adventure, spectator).", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/give", description: "Gives an item to a player.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/tp", description: "Teleports entities (players, mobs, etc.).", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/time", description: "Changes or queries the world's game time.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/weather", description: "Sets the weather (clear, rain, thunder).", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/kill", description: "Kills entities (players, mobs, etc.).", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/clear", description: "Clears items from player inventory.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/locate", description: "Locates the nearest structure or biome.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/difficulty", description: "Sets the game difficulty level.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/effect", description: "Applies or clears status effects.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/enchant", description: "Enchants an item held by a player.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/xp", description: "Adds or removes player experience.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/summon", description: "Summons an entity.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/setblock", description: "Changes a block to another block.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2),
+        ConsoleCommand(name: "/fill", description: "Fills a region with a specific block.", worksInBedrock: true, worksInJava: true, opLevelBedrock: 2, opLevelJava: 2)
+    ]
 }

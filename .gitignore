@@ -12,6 +12,7 @@ yarn-error.log*
 dist/
 build/
 build-ios/
+build-output/
 DerivedData/
 coverage/
 *.tgz

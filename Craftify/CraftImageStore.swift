@@ -8,7 +8,6 @@
 import Foundation
 import SwiftUI
 import UIKit
-@preconcurrency import CloudKit
 
 enum CraftImageAssetKey {
     static let recordType = "CraftImageAsset"
@@ -30,7 +29,6 @@ enum CraftImageAssetKey {
 final class CraftImageStore: ObservableObject {
     static let shared = CraftImageStore()
 
-    private let database: CKDatabase
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let imageDirectory: URL
@@ -51,7 +49,6 @@ final class CraftImageStore: ObservableObject {
         storageDirectory: URL? = nil,
         legacyCacheDirectory: URL? = nil
     ) {
-        self.database = CKContainer(identifier: containerIdentifier).publicCloudDatabase
         self.fileManager = fileManager
         self.defaults = defaults
 
@@ -209,140 +206,8 @@ final class CraftImageStore: ObservableObject {
 
     private func synchronize(batch: [String], generation: Int) async -> Bool {
         guard generation == storageGeneration else { return false }
-        let predicate = NSPredicate(
-            format: "%K IN %@",
-            CraftImageAssetKey.assetKeyField,
-            batch
-        )
-        let metadataQuery = CKQuery(
-            recordType: CraftImageAssetKey.recordType,
-            predicate: predicate
-        )
-
-        do {
-            let metadataRecords = try await fetchAllRecords(
-                matching: metadataQuery,
-                desiredKeys: [
-                    CraftImageAssetKey.assetKeyField,
-                    CraftImageAssetKey.versionField
-                ]
-            )
-            guard generation == storageGeneration else { return false }
-
-            let metadata = metadataRecords.reduce(into: [String: Int64]()) { result, record in
-                guard let key = record[CraftImageAssetKey.assetKeyField] as? String else {
-                    return
-                }
-                let version = record[CraftImageAssetKey.versionField] as? Int64 ?? 1
-                result[key] = max(result[key] ?? 0, version)
-            }
-
-            let returnedKeys = Set(metadata.keys)
-            var cacheChanged = false
-
-            for key in batch where !returnedKeys.contains(key) && localVersion(for: key) > 0 {
-                removeCachedRemoteImage(for: key)
-                cacheChanged = true
-            }
-
-            let outdatedKeys = metadata.compactMap { key, remoteVersion -> String? in
-                let hasValidFile = UIImage(contentsOfFile: cachedFileURL(for: key).path) != nil
-                return localVersion(for: key) < remoteVersion || !hasValidFile ? key : nil
-            }
-
-            if !outdatedKeys.isEmpty {
-                let assetPredicate = NSPredicate(
-                    format: "%K IN %@",
-                    CraftImageAssetKey.assetKeyField,
-                    outdatedKeys
-                )
-                let assetQuery = CKQuery(
-                    recordType: CraftImageAssetKey.recordType,
-                    predicate: assetPredicate
-                )
-                let assetRecords = try await fetchAllRecords(
-                    matching: assetQuery,
-                    desiredKeys: [
-                        CraftImageAssetKey.assetKeyField,
-                        CraftImageAssetKey.fileField,
-                        CraftImageAssetKey.versionField
-                    ]
-                )
-                guard generation == storageGeneration else { return false }
-
-                for record in assetRecords {
-                    if try store(record: record) {
-                        cacheChanged = true
-                    }
-                }
-            }
-
-            let checkedAt = Date()
-            batch.forEach { lastChecked[$0] = checkedAt }
-
-            if cacheChanged {
-                objectWillChange.send()
-            }
-            return true
-        } catch {
-            guard generation == storageGeneration else { return false }
-
-            let checkedAt = Date()
-            batch.forEach { lastChecked[$0] = checkedAt }
-            print("Craft image sync failed: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    private func fetchAllRecords(
-        matching query: CKQuery,
-        desiredKeys: [CKRecord.FieldKey]
-    ) async throws -> [CKRecord] {
-        var page = try await database.records(
-            matching: query,
-            desiredKeys: desiredKeys,
-            resultsLimit: CKQueryOperation.maximumResults
-        )
-        var records = try successfulRecords(from: page.matchResults)
-
-        while let cursor = page.queryCursor {
-            page = try await database.records(
-                continuingMatchFrom: cursor,
-                desiredKeys: desiredKeys,
-                resultsLimit: CKQueryOperation.maximumResults
-            )
-            records.append(contentsOf: try successfulRecords(from: page.matchResults))
-        }
-
-        return records
-    }
-
-    private func successfulRecords(
-        from results: [(CKRecord.ID, Result<CKRecord, Error>)]
-    ) throws -> [CKRecord] {
-        try results.map { _, result in
-            try result.get()
-        }
-    }
-
-    @discardableResult
-    private func store(record: CKRecord) throws -> Bool {
-        guard let assetKey = record[CraftImageAssetKey.assetKeyField] as? String,
-              let asset = record[CraftImageAssetKey.fileField] as? CKAsset,
-              let sourceURL = asset.fileURL else {
-            return false
-        }
-
-        let data = try Data(contentsOf: sourceURL)
-        guard let image = UIImage(data: data) else {
-            throw CraftImageStoreError.invalidImageData
-        }
-
-        try data.write(to: cachedFileURL(for: assetKey), options: .atomic)
-        imageCache.setObject(image, forKey: assetKey as NSString)
-
-        let version = record[CraftImageAssetKey.versionField] as? Int64 ?? 1
-        defaults.set(Int(version), forKey: versionDefaultsKey(for: assetKey))
+        let checkedAt = Date()
+        batch.forEach { lastChecked[$0] = checkedAt }
         return true
     }
 
@@ -457,13 +322,6 @@ final class CraftImageStore: ObservableObject {
     }
 }
 
-private enum CraftImageStoreError: LocalizedError {
-    case invalidImageData
-
-    var errorDescription: String? {
-        "CloudKit returned an invalid image file."
-    }
-}
 
 @MainActor
 struct CraftImage: View {

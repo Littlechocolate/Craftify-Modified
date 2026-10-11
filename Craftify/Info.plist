@@ -64,7 +64,5 @@
 			<false/>
 		</dict>
 	</dict>
-	<key>MinimumOSVersion</key>
-	<string>18.0</string>
 </dict>
 </plist>

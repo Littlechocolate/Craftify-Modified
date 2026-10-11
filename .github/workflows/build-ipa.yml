@@ -76,41 +76,51 @@ jobs:
             exit 1
           fi
 
-          # Set MinimumOSVersion to 17.0 (required by SwiftUI iOS 17 APIs)
-          /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 17.0" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 17.0" Payload/Craftify.app/Info.plist 2>/dev/null || true
+          # Reset MinimumOSVersion to 17.0
+          /usr/libexec/PlistBuddy -c "Delete :MinimumOSVersion" Payload/Craftify.app/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 17.0" Payload/Craftify.app/Info.plist
 
           # Remove any residual iCloud keys
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-container-identifiers" Payload/Craftify.app/Info.plist 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-services" Payload/Craftify.app/Info.plist 2>/dev/null || true
           /usr/libexec/PlistBuddy -c "Delete :NSUbiquitousContainers" Payload/Craftify.app/Info.plist 2>/dev/null || true
 
+          # Ensure CFBundleExecutable is exactly Craftify
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable Craftify" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleExecutable string Craftify" Payload/Craftify.app/Info.plist 2>/dev/null || true
+
+          # Ensure CFBundleIdentifier is be.ghentphotography.www.Craftify
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier be.ghentphotography.www.Craftify" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string be.ghentphotography.www.Craftify" Payload/Craftify.app/Info.plist 2>/dev/null || true
+
           # Convert Info.plist to XML1 so LiveContainer / ZSign custom parser parses reliably
           plutil -convert xml1 Payload/Craftify.app/Info.plist
+          plutil -lint Payload/Craftify.app/Info.plist
 
-          echo "Info.plist CFBundleExecutable:"
-          /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" Payload/Craftify.app/Info.plist || true
-          echo "Info.plist CFBundleIdentifier:"
-          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
-          echo "Info.plist MinimumOSVersion:"
-          /usr/libexec/PlistBuddy -c "Print MinimumOSVersion" Payload/Craftify.app/Info.plist || true
+          echo "Verified Info.plist:"
+          /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" Payload/Craftify.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist
+          /usr/libexec/PlistBuddy -c "Print MinimumOSVersion" Payload/Craftify.app/Info.plist
 
-          # Do not pre-generate LCAppInfo.plist; let LiveContainer properly initialize its own container metadata
+          # CRITICAL: Clean any LCAppInfo.plist, LiveContainer.tmp, or duplicate executable binaries!
           rm -f Payload/Craftify.app/LCAppInfo.plist
+          rm -f Payload/Craftify.app/LiveContainer.tmp
+          rm -f Payload/Craftify.app/be.ghentphotography.www.Craftify
 
-          # Create executable symlinks for all possible lookup paths
-          # (CFBundleExecutable, bundle identifier fallback, and ZSign temporary filename)
-          ln -sf Craftify Payload/Craftify.app/be.ghentphotography.www.Craftify
-          ln -sf Craftify Payload/Craftify.app/LiveContainer.tmp
-
-          # Clean extended attributes & apply clean ad-hoc signature
-          echo "Preparing signatures and cleaning attributes..."
+          # Clean extended attributes
           xattr -cr Payload/Craftify.app || true
-          codesign --force --deep --sign - Payload/Craftify.app
+
+          # Clean previous signature and sign with exact bundle identifier
+          rm -rf Payload/Craftify.app/_CodeSignature
+          codesign --force --sign - --identifier "be.ghentphotography.www.Craftify" Payload/Craftify.app/Craftify
+          codesign --force --sign - --identifier "be.ghentphotography.www.Craftify" Payload/Craftify.app
           codesign -dvvv Payload/Craftify.app || true
 
-          # Package as .ipa
+          # Verify package layout before archiving
+          echo "Payload contents:"
+          ls -la Payload/Craftify.app/
+
+          # Package as .ipa (-y to store symbolic links properly, -qr)
           echo "Creating Craftify.ipa..."
-          zip -qr Craftify.ipa Payload
+          zip -qry Craftify.ipa Payload
 
           # Create .zip copy as requested by user for easier transfer
           echo "Creating Craftify.zip for transmission..."
@@ -152,15 +162,16 @@ jobs:
             - 遵循 Minecraft Wiki 官方游戏内分类 (Building Blocks, Equipment, Redstone, Food & Cooking, Misc)
             - 设置页内置多版本切换与配方导入冲突解决器 (替换 / 同时保留 / 取消)
             - 最低支持系统已精确匹配至 iOS 17.0，最大化提升 LiveContainer dyld hook 兼容性
-            - 内置多路径可执行文件别名与签名保护垫，彻底解决 `executable path not found` 问题
+            - 彻底移除 CloudKit，消除权限验证失败导致的动态库加载阻塞
+            - 清理所有冲突临时文件与多余别名，精确绑定 Bundle Identifier 与可执行文件签名，彻底解决 `executable path not found` 问题
 
             **iOS 18.5 LiveContainer 安装关键步骤**：
-            1. **必须先完全删除** LiveContainer 中旧的 Craftify 图标及残留应用数据，避免旧版错误配置干扰。
+            1. **必须先完全删除** LiveContainer 中此前安装的 Craftify 图标及残留应用数据（长按删除），防止之前旧版损坏的 `Info.plist` 残留缓存干扰。
             2. 导入本版本 `Craftify.ipa` 或 `Craftify.zip`。
             3. 长按 Craftify 图标进入 **App Settings (应用设置)**：
-               - 确保开启 **Spoof SDK Version (伪装 SDK 版本)**（iOS 18+ 必备）。
                - 若你使用 JIT 模式或 TrollStore：开启 **Don't sign app (无需签名)**。
-               - 若你配置了 P12 证书的 JIT-Less 模式：点击 **Force Sign (强制重新签名)** 确保证书成功注入。
+               - 若你使用 JIT-Less (P12证书) 模式：点击 **Force Sign (强制重新签名)** 确保证书成功注入。
+               - 若仍有兼容性提示，可尝试切换 **Spoof SDK Version (伪装 SDK 版本)**。
             4. 点击启动应用即可流畅运行！
           files: |
             Craftify.ipa

@@ -7,7 +7,6 @@
 
 import Foundation
 import Combine
-@preconcurrency import CloudKit
 import UIKit
 import Network
 
@@ -415,6 +414,22 @@ final class DataManager: ObservableObject {
         return false
     }
 
+    private let localReportsKey = "local-recipe-reports"
+
+    private func loadLocalReports() -> [RecipeReport] {
+        guard let data = UserDefaults.standard.data(forKey: localReportsKey),
+              let reports = try? JSONDecoder().decode([RecipeReport].self, from: data) else {
+            return []
+        }
+        return reports
+    }
+
+    private func saveLocalReports(_ reports: [RecipeReport]) {
+        if let data = try? JSONEncoder().encode(reports) {
+            UserDefaults.standard.set(data, forKey: localReportsKey)
+        }
+    }
+
     func submitRecipeReport(
         reportType: String,
         recipeName: String,
@@ -423,165 +438,52 @@ final class DataManager: ObservableObject {
         description: String,
         completion: @escaping @MainActor (Result<RecipeReport, Error>) -> Void
     ) {
-        guard isConnected else {
-            errorMessage = ErrorType.network.rawValue
-            accessibilityAnnouncement = errorMessage
-            completion(.failure(NSError(
-                domain: "DataManager",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "No internet connection"]
-            )))
-            return
-        }
-
-        Task {
-            let database = CKContainer(identifier: "iCloud.craftifydb").publicCloudDatabase
-            let record = CKRecord(recordType: "PublicRecipeReport")
-            let localID = UUID().uuidString
-            let timestamp = Date()
-
-            record["localID"] = localID
-            record["reportType"] = reportType
-            record["recipeName"] = recipeName
-            record["category"] = category
-            record["recipeID"] = recipeID
-            record["description"] = description
-            record["timestamp"] = timestamp
-            record["status"] = "Pending"
-
-            do {
-                let savedRecord = try await database.save(record)
-                let report = RecipeReport(
-                    id: localID,
-                    recordID: savedRecord.recordID.recordName,
-                    localID: localID,
-                    reportType: reportType,
-                    recipeName: recipeName,
-                    category: category,
-                    recipeID: recipeID,
-                    description: description,
-                    timestamp: timestamp,
-                    status: "Pending"
-                )
-                accessibilityAnnouncement = "Report submitted successfully"
-                lastReportStatusFetchTime = nil
-                completion(.success(report))
-            } catch {
-                let type = errorType(for: error)
-                errorMessage = "Failed to submit report: \(type.rawValue)"
-                accessibilityAnnouncement = errorMessage
-                completion(.failure(error))
-            }
-        }
+        let localID = UUID().uuidString
+        let timestamp = Date()
+        let report = RecipeReport(
+            id: localID,
+            recordID: localID,
+            localID: localID,
+            reportType: reportType,
+            recipeName: recipeName,
+            category: category,
+            recipeID: recipeID,
+            description: description,
+            timestamp: timestamp,
+            status: "Saved Locally"
+        )
+        var reports = loadLocalReports()
+        reports.append(report)
+        saveLocalReports(reports)
+        accessibilityAnnouncement = "Report saved locally"
+        completion(.success(report))
     }
 
     func fetchRecipeReports(
         completion: @escaping @MainActor (Result<[RecipeReport], Error>) -> Void
     ) {
-        guard isConnected else {
-            errorMessage = ErrorType.network.rawValue
-            accessibilityAnnouncement = errorMessage
-            completion(.failure(NSError(
-                domain: "DataManager",
-                code: -2,
-                userInfo: [NSLocalizedDescriptionKey: "No internet connection"]
-            )))
-            return
-        }
-
-        if let lastFetch = lastReportStatusFetchTime,
-           Date().timeIntervalSince(lastFetch) < reportStatusFetchInterval {
-            print("Skipping report fetch; last fetch was less than \(reportStatusFetchInterval) seconds ago.")
-            completion(.success([]))
-            return
-        }
-
-        Task {
-            do {
-                let container = CKContainer(identifier: "iCloud.craftifydb")
-                let userRecordID = try await container.userRecordID()
-                let userReference = CKRecord.Reference(recordID: userRecordID, action: .none)
-                let predicate = NSPredicate(format: "___createdBy == %@", userReference)
-                let query = CKQuery(recordType: "PublicRecipeReport", predicate: predicate)
-                let records = try await fetchAllRecords(matching: query, from: container.publicCloudDatabase)
-                let reports = records.compactMap(convertRecordToRecipeReport)
-                lastReportStatusFetchTime = Date()
-                completion(.success(reports))
-            } catch {
-                let type = errorType(for: error)
-                errorMessage = "Failed to fetch reports: \(type.rawValue)"
-                accessibilityAnnouncement = errorMessage
-                completion(.failure(error))
-            }
-        }
+        let reports = loadLocalReports()
+        completion(.success(reports))
     }
 
     func deleteRecipeReport(
         _ report: RecipeReport,
         completion: @escaping @MainActor (Bool) -> Void
     ) {
-        guard isConnected else {
-            errorMessage = ErrorType.network.rawValue
-            accessibilityAnnouncement = errorMessage
-            completion(false)
-            return
-        }
-
-        guard let recordIDString = report.recordID else {
-            accessibilityAnnouncement = "Report deleted successfully"
-            completion(true)
-            return
-        }
-
-        Task {
-            do {
-                let database = CKContainer(identifier: "iCloud.craftifydb").publicCloudDatabase
-                _ = try await database.deleteRecord(withID: CKRecord.ID(recordName: recordIDString))
-                accessibilityAnnouncement = "Report deleted successfully"
-                completion(true)
-            } catch let error as CKError where error.code == .unknownItem {
-                accessibilityAnnouncement = "Report deleted successfully"
-                completion(true)
-            } catch {
-                let type = errorType(for: error)
-                errorMessage = "Failed to delete report: \(type.rawValue)"
-                accessibilityAnnouncement = errorMessage
-                completion(false)
-            }
-        }
+        var reports = loadLocalReports()
+        reports.removeAll { $0.id == report.id || $0.recordID == report.recordID }
+        saveLocalReports(reports)
+        accessibilityAnnouncement = "Report deleted"
+        completion(true)
     }
 
     func deleteAllRecipeReports(
         reports: [RecipeReport],
         completion: @escaping @MainActor (Bool) -> Void
     ) {
-        guard isConnected else {
-            errorMessage = ErrorType.network.rawValue
-            accessibilityAnnouncement = errorMessage
-            completion(false)
-            return
-        }
-
-        let recordIDs = reports.compactMap(\.recordID).map { CKRecord.ID(recordName: $0) }
-        guard !recordIDs.isEmpty else {
-            accessibilityAnnouncement = "All reports deleted successfully"
-            completion(true)
-            return
-        }
-
-        Task {
-            do {
-                let database = CKContainer(identifier: "iCloud.craftifydb").publicCloudDatabase
-                try await deleteRecipeReportRecords(recordIDs, from: database)
-                accessibilityAnnouncement = "All reports deleted successfully"
-                completion(true)
-            } catch {
-                let type = errorType(for: error)
-                errorMessage = "Failed to delete all reports: \(type.rawValue)"
-                accessibilityAnnouncement = errorMessage
-                completion(false)
-            }
-        }
+        saveLocalReports([])
+        accessibilityAnnouncement = "All reports deleted"
+        completion(true)
     }
 
     func clearCache(completion: @escaping (Bool) -> Void) {
@@ -616,68 +518,11 @@ final class DataManager: ObservableObject {
         clearCache { cacheSuccess in
             self.clearChestsAndLegacyFavorites()
             self.clearRecentSearches()
+            self.saveLocalReports([])
             self.lastReportStatusFetchTime = nil
-
-            guard self.isConnected else {
-                self.errorMessage = ErrorType.network.rawValue
-                self.cacheClearedMessage = "Local data cleared, but recipe reports could not be deleted while offline."
-                self.accessibilityAnnouncement = self.cacheClearedMessage
-                completion(false)
-                return
-            }
-
-            Task {
-                do {
-                    try await self.deleteAllCurrentUserRecipeReports()
-                    if cacheSuccess {
-                        self.cacheClearedMessage = "All data cleared successfully."
-                        self.accessibilityAnnouncement = "All data cleared successfully."
-                        completion(true)
-                    } else {
-                        self.cacheClearedMessage = "Recipe reports were deleted, but some local data could not be cleared."
-                        self.accessibilityAnnouncement = self.cacheClearedMessage
-                        completion(false)
-                    }
-                } catch {
-                    let type = self.errorType(for: error)
-                    self.errorMessage = "Local data was cleared, but recipe reports could not be deleted: \(type.rawValue)"
-                    self.cacheClearedMessage = "Failed to clear all data."
-                    self.accessibilityAnnouncement = self.errorMessage
-                    completion(false)
-                }
-            }
-        }
-    }
-
-    private func deleteAllCurrentUserRecipeReports() async throws {
-        let container = CKContainer(identifier: "iCloud.craftifydb")
-        let userRecordID = try await container.userRecordID()
-        let userReference = CKRecord.Reference(recordID: userRecordID, action: .none)
-        let predicate = NSPredicate(format: "___createdBy == %@", userReference)
-        let query = CKQuery(recordType: "PublicRecipeReport", predicate: predicate)
-        let database = container.publicCloudDatabase
-        let records = try await fetchAllRecords(matching: query, from: database)
-        try await deleteRecipeReportRecords(records.map(\.recordID), from: database)
-    }
-
-    private func deleteRecipeReportRecords(
-        _ recordIDs: [CKRecord.ID],
-        from database: CKDatabase
-    ) async throws {
-        let batchSize = 200
-        for start in stride(from: 0, to: recordIDs.count, by: batchSize) {
-            let end = min(start + batchSize, recordIDs.count)
-            let batch = Array(recordIDs[start..<end])
-            let (_, deleteResults) = try await database.modifyRecords(
-                saving: [],
-                deleting: batch
-            )
-
-            for result in deleteResults.values {
-                if case .failure(let error) = result {
-                    throw error
-                }
-            }
+            self.cacheClearedMessage = "All data cleared successfully."
+            self.accessibilityAnnouncement = "All data cleared successfully."
+            completion(true)
         }
     }
 
@@ -708,175 +553,11 @@ final class DataManager: ObservableObject {
         return FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
     }
 
-    private func convertRecordToRecipe(_ record: CKRecord) -> Recipe? {
-        guard let name = record["name"] as? String,
-              let image = record["image"] as? String,
-              let ingredients = record["ingredients"] as? [String],
-              let outputInt64 = record["output"] as? Int64,
-              let category = record["category"] as? String else {
-            return nil
-        }
-
-        let id = Int(record.recordID.recordName) ?? 0
-        let output = Int(outputInt64)
-        let imageremark = record["imageremark"] as? String
-        let remarks = record["remarks"] as? String
-        let alt0 = record["alternateIngredients"] as? [String]
-        let alt1 = record["alternateIngredients1"] as? [String]
-        let alt2 = record["alternateIngredients2"] as? [String]
-        let alt3 = record["alternateIngredients3"] as? [String]
-        let altOutput0 = (record["alternateOutput"] as? Int64).map(Int.init)
-        let altOutput1 = (record["alternateOutput1"] as? Int64).map(Int.init)
-        let altOutput2 = (record["alternateOutput2"] as? Int64).map(Int.init)
-        let altOutput3 = (record["alternateOutput3"] as? Int64).map(Int.init)
-
-        return Recipe(
-            id: id,
-            name: name,
-            image: image,
-            ingredients: ingredients,
-            alternateIngredients: alt0,
-            alternateIngredients1: alt1,
-            alternateIngredients2: alt2,
-            alternateIngredients3: alt3,
-            output: output,
-            alternateOutput: altOutput0,
-            alternateOutput1: altOutput1,
-            alternateOutput2: altOutput2,
-            alternateOutput3: altOutput3,
-            category: category,
-            imageremark: imageremark,
-            remarks: remarks
-        )
-    }
-
     func fetchConsoleCommands(completion: @escaping @MainActor () -> Void = {}) {
-        guard isConnected else {
-            errorMessage = ErrorType.network.rawValue
-            accessibilityAnnouncement = errorMessage
-            completion()
-            return
+        if consoleCommands.isEmpty {
+            consoleCommands = ConsoleCommand.defaultCommands.sorted { $0.name < $1.name }
         }
-
-        Task {
-            do {
-                let database = CKContainer(identifier: "iCloud.craftifydb").publicCloudDatabase
-                let query = CKQuery(recordType: "ConsoleCommand", predicate: NSPredicate(value: true))
-                let records = try await fetchAllRecords(matching: query, from: database)
-                consoleCommands = records.compactMap(convertRecordToConsoleCommand).sorted { $0.name < $1.name }
-                completion()
-            } catch {
-                let type = errorType(for: error)
-                errorMessage = type.rawValue
-                accessibilityAnnouncement = errorMessage
-                completion()
-            }
-        }
-    }
-
-    private func fetchCatalogRecipeCount(from database: CKDatabase) async -> Int? {
-        do {
-            let recordID = CKRecord.ID(recordName: Self.catalogRecordName)
-            let record = try await database.record(for: recordID)
-            guard let count = record[Self.catalogRecipeCountField] as? Int64,
-                  count >= 0 else {
-                return nil
-            }
-            return Int(count)
-        } catch {
-            if (error as? CKError)?.code != .unknownItem {
-                print("Could not fetch recipe catalog: \(error.localizedDescription)")
-            }
-            return nil
-        }
-    }
-
-    private func fetchAllRecords(
-        matching query: CKQuery,
-        from database: CKDatabase,
-        progress: ((Int) -> Void)? = nil
-    ) async throws -> [CKRecord] {
-        var page = try await database.records(
-            matching: query,
-            resultsLimit: CKQueryOperation.maximumResults
-        )
-        var fetchedRecords = records(from: page.matchResults)
-        progress?(fetchedRecords.count)
-
-        while let cursor = page.queryCursor {
-            page = try await database.records(
-                continuingMatchFrom: cursor,
-                resultsLimit: CKQueryOperation.maximumResults
-            )
-            fetchedRecords.append(contentsOf: records(from: page.matchResults))
-            progress?(fetchedRecords.count)
-        }
-
-        return fetchedRecords
-    }
-
-    private func records(
-        from results: [(CKRecord.ID, Result<CKRecord, Error>)]
-    ) -> [CKRecord] {
-        results.compactMap { recordID, result in
-            switch result {
-            case .success(let record):
-                return record
-            case .failure(let error):
-                errorMessage = "Error fetching record \(recordID.recordName): \(error.localizedDescription)"
-                accessibilityAnnouncement = errorMessage
-                return nil
-            }
-        }
-    }
-
-    private func convertRecordToRecipeReport(_ record: CKRecord) -> RecipeReport? {
-        guard
-            let localID = record["localID"] as? String,
-            let reportType = record["reportType"] as? String,
-            let recipeName = record["recipeName"] as? String,
-            let category = record["category"] as? String,
-            let description = record["description"] as? String,
-            let timestamp = record["timestamp"] as? Date,
-            let status = record["status"] as? String
-        else {
-            errorMessage = ErrorType.missingFields.rawValue
-            accessibilityAnnouncement = errorMessage
-            return nil
-        }
-
-        return RecipeReport(
-            id: localID,
-            recordID: record.recordID.recordName,
-            localID: localID,
-            reportType: reportType,
-            recipeName: recipeName,
-            category: category,
-            recipeID: record["recipeID"] as? Int,
-            description: description,
-            timestamp: timestamp,
-            status: status
-        )
-    }
-
-    private func convertRecordToConsoleCommand(_ record: CKRecord) -> ConsoleCommand? {
-        return ConsoleCommand(from: record)
-    }
-
-    private func errorType(for err: Swift.Error) -> ErrorType {
-        if let ckError = err as? CKError {
-            switch ckError.code {
-            case .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited:
-                return .network
-            case .notAuthenticated, .permissionFailure:
-                return .permissions
-            case .unknownItem, .invalidArguments:
-                return .dataCorruption
-            default:
-                return .unknown
-            }
-        }
-        return .unknown
+        completion()
     }
 
     var categories: [String] {
@@ -920,17 +601,6 @@ final class DataManager: ObservableObject {
             let matchesCategory = selectedCategory == nil || recipe.category == selectedCategory
             let matchesSearch = searchText.isEmpty || recipe.name.lowercased().contains(searchText.lowercased())
             return matchesCategory && matchesSearch
-        }
-    }
-}
-
-extension CKError {
-    var isRetryable: Bool {
-        switch self.code {
-        case .networkFailure, .networkUnavailable, .serviceUnavailable, .requestRateLimited:
-            return true
-        default:
-            return false
         }
     }
 }
