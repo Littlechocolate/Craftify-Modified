@@ -41,9 +41,9 @@ jobs:
             -destination "generic/platform=iOS" \
             -configuration Release \
             -derivedDataPath ./build-output \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_ALLOWED=YES \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_IDENTITY="-" \
             AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package Unencrypted IPA & ZIP for LiveContainer
@@ -77,15 +77,9 @@ jobs:
           echo "Info.plist CFBundleIdentifier:"
           /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
 
-          # Ad-hoc sign the app bundle for LiveContainer compatibility
-          echo "Applying ad-hoc code signature..."
-          if [ -d "Payload/Craftify.app/Frameworks" ]; then
-            for f in Payload/Craftify.app/Frameworks/*; do
-              [ -e "$f" ] && codesign --force --sign - "$f" || true
-            done
-          fi
-          codesign --force --sign - Payload/Craftify.app/Craftify
-          codesign --force --sign - Payload/Craftify.app || true
+          # Verify signature
+          echo "Verifying code signature..."
+          codesign -v Payload/Craftify.app || codesign --force --sign - Payload/Craftify.app/Craftify || true
 
           # Package as .ipa
           echo "Creating Craftify.ipa..."
@@ -97,7 +91,7 @@ jobs:
 
           # Verify package contents
           echo "IPA archive contents (top-level):"
-          unzip -l Craftify.ipa | head -n 25
+          unzip -l Craftify.ipa | head -n 30
 
           echo "File sizes:"
           ls -lh Craftify.ipa Craftify.zip
@@ -120,8 +114,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
-          tag_name: "v1.1.0-livecontainer"
-          name: "Craftify v1.1.0 for LiveContainer (iOS 18.5+)"
+          tag_name: "v1.1.0-livecontainer-${{ github.run_number }}"
+          name: "Craftify v1.1.0 for LiveContainer (Build ${{ github.run_number }})"
           body: |
             ### Craftify iOS 离线配方版 (LiveContainer 适用)
 
@@ -141,3 +135,4 @@ jobs:
             SHA256SUMS.txt
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
