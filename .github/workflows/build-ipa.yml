@@ -76,8 +76,8 @@ jobs:
             exit 1
           fi
 
-          # Set MinimumOSVersion to 16.0 for maximum compatibility with LiveContainer dyld hooks
-          /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 16.0" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 16.0" Payload/Craftify.app/Info.plist 2>/dev/null || true
+          # Set MinimumOSVersion to 17.0 (required by SwiftUI iOS 17 APIs)
+          /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 17.0" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 17.0" Payload/Craftify.app/Info.plist 2>/dev/null || true
 
           # Remove any residual iCloud keys
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-container-identifiers" Payload/Craftify.app/Info.plist 2>/dev/null || true
@@ -151,7 +151,7 @@ jobs:
             - 预置 Minecraft 1.21.1 (1,290 配方) 与 26w14a (1,513 配方)
             - 遵循 Minecraft Wiki 官方游戏内分类 (Building Blocks, Equipment, Redstone, Food & Cooking, Misc)
             - 设置页内置多版本切换与配方导入冲突解决器 (替换 / 同时保留 / 取消)
-            - 最低支持系统已降低至 iOS 16.0，最大化提升 LiveContainer dyld hook 兼容性
+            - 最低支持系统已精确匹配至 iOS 17.0，最大化提升 LiveContainer dyld hook 兼容性
             - 内置多路径可执行文件别名与签名保护垫，彻底解决 `executable path not found` 问题
 
             **iOS 18.5 LiveContainer 安装关键步骤**：
