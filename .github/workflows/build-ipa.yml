@@ -86,6 +86,9 @@ jobs:
           xcrun simctl boot "$DEVICE_UDID" || true
           xcrun simctl bootstatus "$DEVICE_UDID" -b
 
+          # Reset CoreSimulatorBridge to clear any stale cache
+          killall -9 CoreSimulatorBridge 2>/dev/null || true
+
           # Install the app
           echo "Installing Craftify onto Simulator..."
           xcrun simctl install "$DEVICE_UDID" "$SIM_APP"

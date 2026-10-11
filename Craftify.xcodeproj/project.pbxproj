@@ -428,7 +428,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 125;
+				CURRENT_PROJECT_VERSION = 1.1.125;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Craftify/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Craftify;
@@ -443,7 +443,7 @@
 					"$(inherited)",
 					"-Wl,-headerpad_max_install_names",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
@@ -461,7 +461,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 125;
+				CURRENT_PROJECT_VERSION = 1.1.125;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Craftify/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Craftify;
@@ -476,7 +476,7 @@
 					"$(inherited)",
 					"-Wl,-headerpad_max_install_names",
 				);
-				MARKETING_VERSION = 1.1;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
