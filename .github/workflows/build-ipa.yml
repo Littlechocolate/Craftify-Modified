@@ -75,12 +75,43 @@ jobs:
             echo "Error: Info.plist not found in Payload/Craftify.app!"
             exit 1
           fi
+
+          # Remove any residual iCloud keys
+          /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-container-identifiers" Payload/Craftify.app/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-services" Payload/Craftify.app/Info.plist 2>/dev/null || true
+          /usr/libexec/PlistBuddy -c "Delete :NSUbiquitousContainers" Payload/Craftify.app/Info.plist 2>/dev/null || true
+
+          # Convert Info.plist to XML1 so LiveContainer / ZSign custom parser parses reliably
+          plutil -convert xml1 Payload/Craftify.app/Info.plist
+
           echo "Info.plist CFBundleExecutable:"
           /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" Payload/Craftify.app/Info.plist || true
           echo "Info.plist CFBundleIdentifier:"
           /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
 
-          # Clean extended attributes & apply ad-hoc signature
+          # Pre-generate LCAppInfo.plist for LiveContainer direct compatibility
+          cat << 'PLISTEOF' > Payload/Craftify.app/LCAppInfo.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LCOrignalBundleIdentifier</key>
+	<string>be.ghentphotography.www.Craftify</string>
+	<key>LCPatchRevision</key>
+	<integer>6</integer>
+	<key>isJITNeeded</key>
+	<false/>
+	<key>doUseLCBundleId</key>
+	<false/>
+	<key>isLocked</key>
+	<false/>
+	<key>isHidden</key>
+	<false/>
+</dict>
+</plist>
+PLISTEOF
+
+          # Clean extended attributes & apply clean ad-hoc signature
           echo "Preparing signatures and cleaning attributes..."
           xattr -cr Payload/Craftify.app || true
           codesign --force --deep --sign - Payload/Craftify.app
