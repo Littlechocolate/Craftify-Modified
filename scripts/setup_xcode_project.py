@@ -31,8 +31,15 @@ def main():
     resources = [
         ("Assets.xcassets", "folder.assetcatalog"),
         ("LaunchScreen.storyboard", "file.storyboard"),
-        ("Resources", "folder")
     ]
+    # IMPORTANT: never ship a top-level "Resources" directory inside an iOS .app.
+    # CFBundle treats "<App>.app/Resources/" as the legacy bundle layout and then
+    # looks for Info.plist/executable in the wrong place (executablePath == nil).
+    # Each .recipe pack is therefore added as an individual file (copied to bundle root).
+    recipe_dir = os.path.join(craftify_dir, "RecipePacks")
+    for rf in sorted(os.listdir(recipe_dir)):
+        if rf.endswith(".recipe"):
+            resources.append((f"RecipePacks/{rf}", "file"))
 
     tests_swift = ["CraftifyTests.swift"]
     uitests_swift = ["CraftifyUITests.swift", "CraftifyUITestsLaunchTests.swift"]
@@ -101,7 +108,7 @@ def main():
 
     for res_name, ftype in resources:
         fid = file_id("FIL2", res_name)
-        lines.append(f"\t\t{fid} /* {res_name} */ = {{isa = PBXFileReference; lastKnownFileType = {ftype}; path = {res_name}; sourceTree = \"<group>\"; }};")
+        lines.append(f"\t\t{fid} /* {res_name} */ = {{isa = PBXFileReference; lastKnownFileType = {ftype}; name = \"{os.path.basename(res_name)}\"; path = \"{res_name}\"; sourceTree = \"<group>\"; }};")
 
     for tf in tests_swift:
         fid = file_id("FIL3", tf)
@@ -454,10 +461,6 @@ def main():
         lines.append("\t\t\t\tLD_RUNPATH_SEARCH_PATHS = (")
         lines.append("\t\t\t\t\t\"$(inherited)\",")
         lines.append("\t\t\t\t\t\"@executable_path/Frameworks\",")
-        lines.append("\t\t\t\t);")
-        lines.append("\t\t\t\tOTHER_LDFLAGS = (")
-        lines.append("\t\t\t\t\t\"$(inherited)\",")
-        lines.append("\t\t\t\t\t\"-Wl,-headerpad_max_install_names\",")
         lines.append("\t\t\t\t);")
         lines.append("\t\t\t\tMARKETING_VERSION = 1.1.0;")
         lines.append("\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;")

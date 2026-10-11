@@ -33,7 +33,8 @@
 		BLD1271CA54EFD5A9CEC5EB6 /* SyncOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */; };
 		BLD294F19B2BB219576F86A2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */; };
 		BLD29BC58ECA61A7E561CA17 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */; };
-		BLD23D5F034471E1AB6E7798 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = FIL2D496F1F8C7F914199ED4 /* Resources */; };
+		BLD20120CE0995751B00685C /* RecipePacks/1.21.1.recipe in Resources */ = {isa = PBXBuildFile; fileRef = FIL23860CC613317AE56A38E /* RecipePacks/1.21.1.recipe */; };
+		BLD26C620A10A84745074362 /* RecipePacks/26w14a.recipe in Resources */ = {isa = PBXBuildFile; fileRef = FIL2C2690EA4E79DF5EC067A /* RecipePacks/26w14a.recipe */; };
 		BLD3A2D4BBEE22A1EA80964D /* CraftifyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL37753585A5069226B36B1 /* CraftifyTests.swift */; };
 		BLD4D81EDCC773BD48BC1233 /* CraftifyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL4325C7FBCDC3029BAEEFE /* CraftifyUITests.swift */; };
 		BLD4E0E1FE7326B0921D7B54 /* CraftifyUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL41718E9ED107755F86280 /* CraftifyUITestsLaunchTests.swift */; };
@@ -86,9 +87,10 @@
 		FIL1A60B6484F147AFDB1A59 /* ReportRecipeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportRecipeView.swift; sourceTree = "<group>"; };
 		FIL16088CF04EC04E83BFC52 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
 		FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOverlayView.swift; sourceTree = "<group>"; };
-		FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
-		FIL2D496F1F8C7F914199ED4 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = "Assets.xcassets"; path = "Assets.xcassets"; sourceTree = "<group>"; };
+		FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = "LaunchScreen.storyboard"; path = "LaunchScreen.storyboard"; sourceTree = "<group>"; };
+		FIL23860CC613317AE56A38E /* RecipePacks/1.21.1.recipe */ = {isa = PBXFileReference; lastKnownFileType = file; name = "1.21.1.recipe"; path = "RecipePacks/1.21.1.recipe"; sourceTree = "<group>"; };
+		FIL2C2690EA4E79DF5EC067A /* RecipePacks/26w14a.recipe */ = {isa = PBXFileReference; lastKnownFileType = file; name = "26w14a.recipe"; path = "RecipePacks/26w14a.recipe"; sourceTree = "<group>"; };
 		FIL37753585A5069226B36B1 /* CraftifyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyTests.swift; sourceTree = "<group>"; };
 		FIL4325C7FBCDC3029BAEEFE /* CraftifyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyUITests.swift; sourceTree = "<group>"; };
 		FIL41718E9ED107755F86280 /* CraftifyUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyUITestsLaunchTests.swift; sourceTree = "<group>"; };
@@ -167,7 +169,8 @@
 				FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */,
 				FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */,
 				FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */,
-				FIL2D496F1F8C7F914199ED4 /* Resources */,
+				FIL23860CC613317AE56A38E /* RecipePacks/1.21.1.recipe */,
+				FIL2C2690EA4E79DF5EC067A /* RecipePacks/26w14a.recipe */,
 			);
 			path = Craftify;
 			sourceTree = "<group>";
@@ -296,7 +299,8 @@
 			files = (
 				BLD294F19B2BB219576F86A2 /* Assets.xcassets in Resources */,
 				BLD29BC58ECA61A7E561CA17 /* LaunchScreen.storyboard in Resources */,
-				BLD23D5F034471E1AB6E7798 /* Resources in Resources */,
+				BLD20120CE0995751B00685C /* RecipePacks/1.21.1.recipe in Resources */,
+				BLD26C620A10A84745074362 /* RecipePacks/26w14a.recipe in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -439,10 +443,6 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-Wl,-headerpad_max_install_names",
-				);
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -471,10 +471,6 @@
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
-				);
-				OTHER_LDFLAGS = (
-					"$(inherited)",
-					"-Wl,-headerpad_max_install_names",
 				);
 				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;

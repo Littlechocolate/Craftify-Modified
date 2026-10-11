@@ -145,6 +145,14 @@ jobs:
           # Remove any residual signature folders to ensure a 100% pure unsigned bundle
           rm -rf Payload/Craftify.app/_CodeSignature
 
+          # Guard: a top-level "Resources" dir makes CFBundle use the legacy layout
+          # (Info.plist/executable not found) -> must never be present in an iOS .app
+          if [ -e Payload/Craftify.app/Resources ]; then
+            echo "❌ Reserved 'Resources' directory found at bundle root"; exit 1
+          fi
+          echo "Bundled recipe packs:"
+          ls -l Payload/Craftify.app/*.recipe
+
           # Clean macOS filesystem extended attributes
           xattr -cr Payload/Craftify.app || true
 
