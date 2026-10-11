@@ -83,8 +83,8 @@ jobs:
           # Clean extended attributes & apply ad-hoc signature
           echo "Preparing signatures and cleaning attributes..."
           xattr -cr Payload/Craftify.app || true
-          codesign --force --sign - Payload/Craftify.app/Craftify || true
-          codesign --force --sign - Payload/Craftify.app || true
+          codesign --force --deep --sign - Payload/Craftify.app
+          codesign -dvvv Payload/Craftify.app || true
 
           # Package as .ipa
           echo "Creating Craftify.ipa..."

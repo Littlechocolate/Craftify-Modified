@@ -31,7 +31,6 @@ def main():
     resources = [
         ("Assets.xcassets", "folder.assetcatalog"),
         ("LaunchScreen.storyboard", "file.storyboard"),
-        ("CraftifyModel.xcdatamodeld", "wrapper.xcdatamodel"),
         ("Resources", "folder")
     ]
 
