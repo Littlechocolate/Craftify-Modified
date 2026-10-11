@@ -75,22 +75,26 @@ jobs:
           echo "Found simulator app at $SIM_APP"
           echo "Inspecting simulator Info.plist:"
           plutil -p "$SIM_APP/Info.plist"
-          DEVICE_UDID=$(xcrun simctl list devices available | grep -E "iPhone 16|iPhone 15" | head -1 | grep -o -E '[0-9A-F-]{36}')
+          DEVICE_UDID=$(xcrun simctl list devices "iOS 18.2" 2>/dev/null | grep "iPhone 16 (" | head -1 | grep -o -E '[0-9A-F-]{36}')
           if [ -z "$DEVICE_UDID" ]; then
-            DEVICE_UDID=$(xcrun simctl create "TestiPhone" "iPhone 16")
+            DEVICE_UDID=$(xcrun simctl list devices "iOS 18.1" 2>/dev/null | grep "iPhone 16 (" | head -1 | grep -o -E '[0-9A-F-]{36}')
           fi
-          echo "Using Simulator Device UDID: $DEVICE_UDID"
+          if [ -z "$DEVICE_UDID" ]; then
+            DEVICE_UDID=$(xcrun simctl list devices available | grep "iPhone 16 (" | head -1 | grep -o -E '[0-9A-F-]{36}')
+          fi
+          echo "Using iOS 18 Simulator Device UDID: $DEVICE_UDID"
+
+          # Ad-hoc sign for simulator execution (required by macOS CoreSimulator installd)
+          echo "Applying ad-hoc signature for simulator execution..."
+          codesign --force --deep --sign - "$SIM_APP"
 
           # Boot simulator
           echo "Booting Simulator..."
           xcrun simctl boot "$DEVICE_UDID" || true
           xcrun simctl bootstatus "$DEVICE_UDID" -b
 
-          # Reset CoreSimulatorBridge to clear any stale cache
-          killall -9 CoreSimulatorBridge 2>/dev/null || true
-
           # Install the app
-          echo "Installing Craftify onto Simulator..."
+          echo "Installing Craftify onto iOS 18 Simulator..."
           xcrun simctl install "$DEVICE_UDID" "$SIM_APP"
 
           # Launch the app
