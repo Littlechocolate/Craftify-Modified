@@ -90,26 +90,19 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
 
           # Pre-generate LCAppInfo.plist for LiveContainer direct compatibility
-          cat << 'PLISTEOF' > Payload/Craftify.app/LCAppInfo.plist
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>LCOrignalBundleIdentifier</key>
-	<string>be.ghentphotography.www.Craftify</string>
-	<key>LCPatchRevision</key>
-	<integer>6</integer>
-	<key>isJITNeeded</key>
-	<false/>
-	<key>doUseLCBundleId</key>
-	<false/>
-	<key>isLocked</key>
-	<false/>
-	<key>isHidden</key>
-	<false/>
-</dict>
-</plist>
-PLISTEOF
+          python3 -c '
+          import plistlib
+          data = {
+              "LCOrignalBundleIdentifier": "be.ghentphotography.www.Craftify",
+              "LCPatchRevision": 6,
+              "isJITNeeded": False,
+              "doUseLCBundleId": False,
+              "isLocked": False,
+              "isHidden": False,
+          }
+          with open("Payload/Craftify.app/LCAppInfo.plist", "wb") as f:
+              plistlib.dump(data, f, fmt=plistlib.FMT_XML)
+          '
 
           # Clean extended attributes & apply clean ad-hoc signature
           echo "Preparing signatures and cleaning attributes..."
