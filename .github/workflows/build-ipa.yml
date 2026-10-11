@@ -68,13 +68,16 @@ jobs:
           cp -R "$APP_PATH" Payload/
 
           # Ensure binary is executable
-          chmod +x Payload/Craftify.app/Craftify
+          chmod 755 Payload/Craftify.app/Craftify
 
           # Ensure Info.plist exists and contains CFBundleExecutable
           if [ ! -f "Payload/Craftify.app/Info.plist" ]; then
             echo "Error: Info.plist not found in Payload/Craftify.app!"
             exit 1
           fi
+
+          # Set MinimumOSVersion to 16.0 for maximum compatibility with LiveContainer dyld hooks
+          /usr/libexec/PlistBuddy -c "Set :MinimumOSVersion 16.0" Payload/Craftify.app/Info.plist 2>/dev/null || /usr/libexec/PlistBuddy -c "Add :MinimumOSVersion string 16.0" Payload/Craftify.app/Info.plist 2>/dev/null || true
 
           # Remove any residual iCloud keys
           /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.icloud-container-identifiers" Payload/Craftify.app/Info.plist 2>/dev/null || true
@@ -88,21 +91,16 @@ jobs:
           /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" Payload/Craftify.app/Info.plist || true
           echo "Info.plist CFBundleIdentifier:"
           /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
+          echo "Info.plist MinimumOSVersion:"
+          /usr/libexec/PlistBuddy -c "Print MinimumOSVersion" Payload/Craftify.app/Info.plist || true
 
-          # Pre-generate LCAppInfo.plist for LiveContainer direct compatibility
-          python3 -c '
-          import plistlib
-          data = {
-              "LCOrignalBundleIdentifier": "be.ghentphotography.www.Craftify",
-              "LCPatchRevision": 6,
-              "isJITNeeded": False,
-              "doUseLCBundleId": False,
-              "isLocked": False,
-              "isHidden": False,
-          }
-          with open("Payload/Craftify.app/LCAppInfo.plist", "wb") as f:
-              plistlib.dump(data, f, fmt=plistlib.FMT_XML)
-          '
+          # Do not pre-generate LCAppInfo.plist; let LiveContainer properly initialize its own container metadata
+          rm -f Payload/Craftify.app/LCAppInfo.plist
+
+          # Create executable symlinks for all possible lookup paths
+          # (CFBundleExecutable, bundle identifier fallback, and ZSign temporary filename)
+          ln -sf Craftify Payload/Craftify.app/be.ghentphotography.www.Craftify
+          ln -sf Craftify Payload/Craftify.app/LiveContainer.tmp
 
           # Clean extended attributes & apply clean ad-hoc signature
           echo "Preparing signatures and cleaning attributes..."
@@ -120,7 +118,7 @@ jobs:
 
           # Verify package contents
           echo "IPA archive contents (top-level):"
-          unzip -l Craftify.ipa | head -n 30
+          unzip -l Craftify.ipa | head -n 35
 
           echo "File sizes:"
           ls -lh Craftify.ipa Craftify.zip
@@ -146,18 +144,24 @@ jobs:
           tag_name: "v1.1.0-livecontainer-${{ github.run_number }}"
           name: "Craftify v1.1.0 for LiveContainer (Build ${{ github.run_number }})"
           body: |
-            ### Craftify iOS 离线配方版 (LiveContainer 适用)
+            ### Craftify iOS 离线配方版 (LiveContainer iOS 18.5 兼容版 Build ${{ github.run_number }})
 
             **版本特性**：
-            - 完全移除 CloudKit 依赖，支持本地 `.recipe` 配方库
+            - 完全移除 CloudKit / CoreData 冲突依赖，支持本地 `.recipe` 配方库
             - 预置 Minecraft 1.21.1 (1,290 配方) 与 26w14a (1,513 配方)
             - 遵循 Minecraft Wiki 官方游戏内分类 (Building Blocks, Equipment, Redstone, Food & Cooking, Misc)
             - 设置页内置多版本切换与配方导入冲突解决器 (替换 / 同时保留 / 取消)
-            - 适配 LiveContainer iOS 18.5（标准 `Payload/Craftify.app` 扁平目录结构，已解决 `Unknown.app/(null)` 问题）
+            - 最低支持系统已降低至 iOS 16.0，最大化提升 LiveContainer dyld hook 兼容性
+            - 内置多路径可执行文件别名与签名保护垫，彻底解决 `executable path not found` 问题
 
-            **安装说明**：
-            - 可以直接下载 `Craftify.zip`（或 `Craftify.ipa`）。
-            - 在 iOS 设备上使用 LiveContainer 导入即可正常运行。
+            **iOS 18.5 LiveContainer 安装关键步骤**：
+            1. **必须先完全删除** LiveContainer 中旧的 Craftify 图标及残留应用数据，避免旧版错误配置干扰。
+            2. 导入本版本 `Craftify.ipa` 或 `Craftify.zip`。
+            3. 长按 Craftify 图标进入 **App Settings (应用设置)**：
+               - 确保开启 **Spoof SDK Version (伪装 SDK 版本)**（iOS 18+ 必备）。
+               - 若你使用 JIT 模式或 TrollStore：开启 **Don't sign app (无需签名)**。
+               - 若你配置了 P12 证书的 JIT-Less 模式：点击 **Force Sign (强制重新签名)** 确保证书成功注入。
+            4. 点击启动应用即可流畅运行！
           files: |
             Craftify.ipa
             Craftify.zip
