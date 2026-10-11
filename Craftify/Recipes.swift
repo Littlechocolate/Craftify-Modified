@@ -227,31 +227,6 @@ struct RecipeReport: Identifiable, Codable {
         try container.encode(timestamp, forKey: .timestamp)
         try container.encode(status, forKey: .status)
     }
-
-    init?(from record: CKRecord) {
-        guard
-            let localID = record["localID"] as? String,
-            let reportType = record["reportType"] as? String,
-            let recipeName = record["recipeName"] as? String,
-            let category = record["category"] as? String,
-            let description = record["description"] as? String,
-            let timestamp = record["timestamp"] as? Date,
-            let status = record["status"] as? String
-        else {
-            return nil
-        }
-
-        self.id = localID
-        self.recordID = record.recordID.recordName
-        self.localID = localID
-        self.reportType = reportType
-        self.recipeName = recipeName
-        self.category = category
-        self.recipeID = record["recipeID"] as? Int
-        self.description = description
-        self.timestamp = timestamp
-        self.status = status
-    }
 }
 
 struct ConsoleCommand: Identifiable, Codable, Equatable {
