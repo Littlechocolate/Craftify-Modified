@@ -441,7 +441,7 @@ def main():
         lines.append(f"\t\t{conf_id} /* {conf_name} configuration for PBXNativeTarget \"Craftify\" */ = {{")
         lines.append("\t\t\tisa = XCBuildConfiguration;")
         lines.append("\t\t\tbuildSettings = {")
-        lines.append("\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = Craftify;")
+        lines.append("\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;")
         lines.append("\t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;")
         lines.append("\t\t\t\tASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;")
         lines.append("\t\t\t\tCODE_SIGN_ENTITLEMENTS = Craftify/Craftify.entitlements;")
