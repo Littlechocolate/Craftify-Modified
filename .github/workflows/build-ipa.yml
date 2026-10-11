@@ -79,7 +79,13 @@ jobs:
 
           # Ad-hoc sign the app bundle for LiveContainer compatibility
           echo "Applying ad-hoc code signature..."
-          codesign --force --deep --sign - Payload/Craftify.app
+          if [ -d "Payload/Craftify.app/Frameworks" ]; then
+            for f in Payload/Craftify.app/Frameworks/*; do
+              [ -e "$f" ] && codesign --force --sign - "$f" || true
+            done
+          fi
+          codesign --force --sign - Payload/Craftify.app/Craftify
+          codesign --force --sign - Payload/Craftify.app || true
 
           # Package as .ipa
           echo "Creating Craftify.ipa..."
