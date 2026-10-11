@@ -21,10 +21,14 @@ jobs:
         run: |
           echo "Available Xcode installations:"
           ls -d /Applications/Xcode*.app || true
-          if [ -d "/Applications/Xcode_15.4.app" ]; then
-            sudo xcode-select -s /Applications/Xcode_15.4.app
+          if [ -d "/Applications/Xcode_16.2.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.2.app
+          elif [ -d "/Applications/Xcode_16.1.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.1.app
           elif [ -d "/Applications/Xcode_16.0.app" ]; then
             sudo xcode-select -s /Applications/Xcode_16.0.app
+          elif [ -d "/Applications/Xcode_15.4.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app
           fi
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
@@ -41,10 +45,9 @@ jobs:
             -destination "generic/platform=iOS" \
             -configuration Release \
             -derivedDataPath ./build-output \
-            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="-" \
-            AD_HOC_CODE_SIGNING_ALLOWED=YES
+            CODE_SIGN_IDENTITY=""
 
       - name: Package Unencrypted IPA & ZIP for LiveContainer
         run: |
@@ -77,9 +80,11 @@ jobs:
           echo "Info.plist CFBundleIdentifier:"
           /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
 
-          # Verify signature
-          echo "Verifying code signature..."
-          codesign -v Payload/Craftify.app || codesign --force --sign - Payload/Craftify.app/Craftify || true
+          # Clean extended attributes & apply ad-hoc signature
+          echo "Preparing signatures and cleaning attributes..."
+          xattr -cr Payload/Craftify.app || true
+          codesign --force --sign - Payload/Craftify.app/Craftify || true
+          codesign --force --sign - Payload/Craftify.app || true
 
           # Package as .ipa
           echo "Creating Craftify.ipa..."
