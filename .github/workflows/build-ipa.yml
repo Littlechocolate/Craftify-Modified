@@ -60,19 +60,21 @@ jobs:
             -scheme Craftify \
             -sdk iphonesimulator \
             -destination "platform=iOS Simulator,name=iPhone 16" \
-            -configuration Debug \
+            -configuration Release \
             -derivedDataPath ./build-sim-output \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY=""
 
-          SIM_APP="./build-sim-output/Build/Products/Debug-iphonesimulator/Craftify.app"
+          SIM_APP="./build-sim-output/Build/Products/Release-iphonesimulator/Craftify.app"
           if [ ! -d "$SIM_APP" ]; then
             echo "Error: Simulator app not found at $SIM_APP"
             exit 1
           fi
 
           echo "Found simulator app at $SIM_APP"
+          echo "Inspecting simulator Info.plist:"
+          plutil -p "$SIM_APP/Info.plist"
           DEVICE_UDID=$(xcrun simctl list devices available | grep -E "iPhone 16|iPhone 15" | head -1 | grep -o -E '[0-9A-F-]{36}')
           if [ -z "$DEVICE_UDID" ]; then
             DEVICE_UDID=$(xcrun simctl create "TestiPhone" "iPhone 16")
@@ -141,6 +143,8 @@ jobs:
 
           # Validate Info.plist
           plutil -lint Payload/Craftify.app/Info.plist
+          echo "Device Info.plist contents:"
+          plutil -p Payload/Craftify.app/Info.plist
 
           echo "Payload contents:"
           ls -la Payload/Craftify.app/
