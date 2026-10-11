@@ -133,6 +133,7 @@ struct RecipeDetailView: View {
     }
 }
 
+@MainActor
 private struct RecipeIdentityHeader: View {
     let recipe: Recipe
     let output: Int
@@ -208,6 +209,7 @@ private struct RecipeIdentityHeader: View {
     }
 }
 
+@MainActor
 private struct AddRecipeToChestView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.dismiss) private var dismiss
@@ -269,7 +271,6 @@ private struct AddRecipeToChestView: View {
                 }
                 .environmentObject(dataManager)
                 .presentationDetents([.medium])
-                .presentationSizing(.page)
             }
             .alert("Couldn’t Add Recipe", isPresented: messageBinding) {
                 Button("OK", role: .cancel) { message = nil }
@@ -298,6 +299,7 @@ private struct AddRecipeToChestView: View {
     }
 }
 
+@MainActor
 struct AlternateRecipesSelector: View {
     let ingredientSets: [[String]]
     @Binding var selectedCraftingOption: Int
@@ -344,6 +346,7 @@ struct AlternateRecipesSelector: View {
     }
 }
 
+@MainActor
 private struct CraftingRecipeCard: View {
     let recipe: Recipe
     let ingredients: [String]
@@ -457,6 +460,7 @@ private struct CraftingRecipeCard: View {
     }
 }
 
+@MainActor
 struct IngredientDetailPopup: View {
     let detail: String
     @Binding var selectedDetail: String?
@@ -559,6 +563,7 @@ struct IngredientDetailPopup: View {
     }
 }
 
+@MainActor
 struct RemarkAndCategoryView: View {
     let recipe: Recipe
     @Environment(\.craftifyAccentColor) private var accent
@@ -656,6 +661,7 @@ struct RemarkAndCategoryView: View {
     }
 }
 
+@MainActor
 struct FurnaceGridView: View {
     let ingredients: [String]
     @Binding var selectedItem: SelectedItem?
@@ -689,6 +695,7 @@ struct FurnaceGridView: View {
     }
 }
 
+@MainActor
 struct DefaultGridView: View {
     let ingredients: [String]
     @Binding var selectedItem: SelectedItem?
@@ -717,6 +724,7 @@ struct DefaultGridView: View {
     }
 }
 
+@MainActor
 struct GridCell: View {
     let index: Int
     let ingredient: String

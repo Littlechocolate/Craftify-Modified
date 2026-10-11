@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 struct ChestsView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -121,7 +122,6 @@ struct ChestsView: View {
                 ChestEditorView(context: context)
                     .environmentObject(dataManager)
                     .presentationDetents([.medium])
-                    .presentationSizing(.page)
             }
             .sheet(isPresented: $showTutorial) {
                 tutorialSheet
@@ -163,17 +163,9 @@ struct ChestsView: View {
     /// The presentation sizing styles have different concrete types. Keeping
     /// them in separate result-builder branches avoids asking the compiler to
     /// infer a common type for `.form` and `.page` in a ternary expression.
-    @ViewBuilder
     private var tutorialSheet: some View {
-        if horizontalSizeClass == .regular {
-            ChestsTutorialView()
-                .presentationDetents([.medium, .large])
-                .presentationSizing(.form)
-        } else {
-            ChestsTutorialView()
-                .presentationDetents([.medium, .large])
-                .presentationSizing(.page)
-        }
+        ChestsTutorialView()
+            .presentationDetents([.medium, .large])
     }
 
     private func deletePendingChest() {
@@ -194,6 +186,7 @@ struct ChestsView: View {
     }
 }
 
+@MainActor
 private struct ChestListRow: View {
     let chest: RecipeChest
     let isEditing: Bool
@@ -233,6 +226,7 @@ private struct ChestListRow: View {
     }
 }
 
+@MainActor
 private struct ChestRow: View {
     let chest: RecipeChest
     @Environment(\.craftifyAccentColor) private var accent
@@ -259,6 +253,7 @@ private struct ChestRow: View {
     }
 }
 
+@MainActor
 struct ChestDetailView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -396,6 +391,7 @@ struct ChestDetailView: View {
     }
 }
 
+@MainActor
 private struct ChestDetailHeader: View {
     let chest: RecipeChest
     let usedSlots: Int
@@ -462,6 +458,7 @@ private struct ChestDetailHeader: View {
     }
 }
 
+@MainActor
 private struct ChestRecipeCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.craftifyAccentColor) private var accent
@@ -508,6 +505,7 @@ enum ChestEditorContext: Identifiable {
     var id: String { switch self { case .new: "new"; case .edit(let chest): chest.id.uuidString } }
 }
 
+@MainActor
 struct ChestEditorView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.dismiss) private var dismiss
@@ -611,6 +609,7 @@ private extension ChestEditorContext {
     var title: String { switch self { case .new: "New Chest"; case .edit: "Edit Chest" } }
 }
 
+@MainActor
 struct ChestsTutorialView: View {
     @Environment(\.dismiss) private var dismiss
     var body: some View {
@@ -639,6 +638,7 @@ struct ChestsTutorialView: View {
     }
 }
 
+@MainActor
 private struct TutorialStep: View {
     let icon: String; let title: String; let text: String
     var body: some View {

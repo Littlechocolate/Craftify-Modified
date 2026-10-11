@@ -11,8 +11,11 @@ yarn-error.log*
 # Build output / temp
 dist/
 build/
+build-ios/
+DerivedData/
 coverage/
 *.tgz
+*.zip
 
 # Environment and secrets
 .env

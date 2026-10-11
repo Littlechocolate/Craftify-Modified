@@ -1,0 +1,559 @@
+#!/usr/bin/env python3
+"""
+Generates a clean, standard Xcode project file for Craftify
+Compatible with Xcode 15, Xcode 16, and macOS / Mac Catalyst.
+"""
+
+import os
+import hashlib
+
+def file_id(prefix: str, name: str) -> str:
+    h = hashlib.md5(f"{prefix}:{name}".encode()).hexdigest().upper()
+    return f"{prefix[:4]}{h[:20]}"
+
+def main():
+    craftify_dir = "Craftify"
+    swift_files = sorted([f for f in os.listdir(craftify_dir) if f.endswith(".swift")])
+    
+    # We will also add any new Swift files created:
+    # RecipeVersionManager.swift, RecipeImportView.swift, RecipeExtractorView.swift, RecipeExtractorService.swift
+    extra_swift_files = [
+        "RecipeVersionManager.swift",
+        "RecipeImportView.swift",
+        "RecipeExtractorView.swift",
+        "RecipeExtractorService.swift"
+    ]
+    for exf in extra_swift_files:
+        if exf not in swift_files:
+            swift_files.append(exf)
+    swift_files.sort()
+
+    resources = [
+        ("Assets.xcassets", "folder.assetcatalog"),
+        ("LaunchScreen.storyboard", "file.storyboard"),
+        ("CraftifyModel.xcdatamodeld", "wrapper.xcdatamodel"),
+        ("Resources", "folder")
+    ]
+
+    tests_swift = ["CraftifyTests.swift"]
+    uitests_swift = ["CraftifyUITests.swift", "CraftifyUITestsLaunchTests.swift"]
+
+    lines = []
+    lines.append("// !$*UTF8*$!")
+    lines.append("{")
+    lines.append("\tarchiveVersion = 1;")
+    lines.append("\tclasses = {")
+    lines.append("\t};")
+    lines.append("\tobjectVersion = 56;")
+    lines.append("\tobjects = {")
+    lines.append("")
+
+    # PBXBuildFile section
+    lines.append("/* Begin PBXBuildFile section */")
+    for sf in swift_files:
+        bid = file_id("BLD1", sf)
+        fid = file_id("FIL1", sf)
+        lines.append(f"\t\t{bid} /* {sf} in Sources */ = {{isa = PBXBuildFile; fileRef = {fid} /* {sf} */; }};")
+    for res_name, _ in resources:
+        bid = file_id("BLD2", res_name)
+        fid = file_id("FIL2", res_name)
+        lines.append(f"\t\t{bid} /* {res_name} in Resources */ = {{isa = PBXBuildFile; fileRef = {fid} /* {res_name} */; }};")
+    for tf in tests_swift:
+        bid = file_id("BLD3", tf)
+        fid = file_id("FIL3", tf)
+        lines.append(f"\t\t{bid} /* {tf} in Sources */ = {{isa = PBXBuildFile; fileRef = {fid} /* {tf} */; }};")
+    for utf in uitests_swift:
+        bid = file_id("BLD4", utf)
+        fid = file_id("FIL4", utf)
+        lines.append(f"\t\t{bid} /* {utf} in Sources */ = {{isa = PBXBuildFile; fileRef = {fid} /* {utf} */; }};")
+    lines.append("/* End PBXBuildFile section */")
+    lines.append("")
+
+    # PBXContainerItemProxy section
+    lines.append("/* Begin PBXContainerItemProxy section */")
+    lines.append("\t\t55BEFB332D55A73200587E5B /* PBXContainerItemProxy */ = {")
+    lines.append("\t\t\tisa = PBXContainerItemProxy;")
+    lines.append("\t\t\tcontainerPortal = 55BEFB1A2D55A73000587E5B /* Project object */;")
+    lines.append("\t\t\tproxyType = 1;")
+    lines.append("\t\t\tremoteGlobalIDString = 55BEFB212D55A73000587E5B;")
+    lines.append("\t\t\tremoteInfo = Craftify;")
+    lines.append("\t\t};")
+    lines.append("\t\t55BEFB3D2D55A73200587E5B /* PBXContainerItemProxy */ = {")
+    lines.append("\t\t\tisa = PBXContainerItemProxy;")
+    lines.append("\t\t\tcontainerPortal = 55BEFB1A2D55A73000587E5B /* Project object */;")
+    lines.append("\t\t\tproxyType = 1;")
+    lines.append("\t\t\tremoteGlobalIDString = 55BEFB212D55A73000587E5B;")
+    lines.append("\t\t\tremoteInfo = Craftify;")
+    lines.append("\t\t};")
+    lines.append("/* End PBXContainerItemProxy section */")
+    lines.append("")
+
+    # PBXFileReference section
+    lines.append("/* Begin PBXFileReference section */")
+    lines.append("\t\t55BEFB222D55A73000587E5B /* Craftify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Craftify.app; sourceTree = BUILT_PRODUCTS_DIR; };")
+    lines.append("\t\t55BEFB322D55A73200587E5B /* CraftifyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraftifyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };")
+    lines.append("\t\t55BEFB3C2D55A73200587E5B /* CraftifyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraftifyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };")
+    lines.append("\t\t55BEFB252D55A73000587E5B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = \"<group>\"; };")
+    lines.append("\t\t55BEFB262D55A73000587E5B /* Craftify.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Craftify.entitlements; sourceTree = \"<group>\"; };")
+
+    for sf in swift_files:
+        fid = file_id("FIL1", sf)
+        lines.append(f"\t\t{fid} /* {sf} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {sf}; sourceTree = \"<group>\"; }};")
+
+    for res_name, ftype in resources:
+        fid = file_id("FIL2", res_name)
+        lines.append(f"\t\t{fid} /* {res_name} */ = {{isa = PBXFileReference; lastKnownFileType = {ftype}; path = {res_name}; sourceTree = \"<group>\"; }};")
+
+    for tf in tests_swift:
+        fid = file_id("FIL3", tf)
+        lines.append(f"\t\t{fid} /* {tf} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {tf}; sourceTree = \"<group>\"; }};")
+
+    for utf in uitests_swift:
+        fid = file_id("FIL4", utf)
+        lines.append(f"\t\t{fid} /* {utf} */ = {{isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = {utf}; sourceTree = \"<group>\"; }};")
+
+    lines.append("/* End PBXFileReference section */")
+    lines.append("")
+
+    # PBXFrameworksBuildPhase section
+    lines.append("/* Begin PBXFrameworksBuildPhase section */")
+    lines.append("\t\t55BEFB1F2D55A73000587E5B /* Frameworks */ = {")
+    lines.append("\t\t\tisa = PBXFrameworksBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append("\t\t55BEFB2F2D55A73200587E5B /* Frameworks */ = {")
+    lines.append("\t\t\tisa = PBXFrameworksBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append("\t\t55BEFB392D55A73200587E5B /* Frameworks */ = {")
+    lines.append("\t\t\tisa = PBXFrameworksBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append("/* End PBXFrameworksBuildPhase section */")
+    lines.append("")
+
+    # PBXGroup section
+    lines.append("/* Begin PBXGroup section */")
+    lines.append("\t\t55BEFB192D55A73000587E5B = {")
+    lines.append("\t\t\tisa = PBXGroup;")
+    lines.append("\t\t\tchildren = (")
+    lines.append("\t\t\t\t55BEFB242D55A73000587E5B /* Craftify */,")
+    lines.append("\t\t\t\t55BEFB352D55A73200587E5B /* CraftifyTests */,")
+    lines.append("\t\t\t\t55BEFB3F2D55A73200587E5B /* CraftifyUITests */,")
+    lines.append("\t\t\t\t55BEFB232D55A73000587E5B /* Products */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tsourceTree = \"<group>\";")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB232D55A73000587E5B /* Products */ = {")
+    lines.append("\t\t\tisa = PBXGroup;")
+    lines.append("\t\t\tchildren = (")
+    lines.append("\t\t\t\t55BEFB222D55A73000587E5B /* Craftify.app */,")
+    lines.append("\t\t\t\t55BEFB322D55A73200587E5B /* CraftifyTests.xctest */,")
+    lines.append("\t\t\t\t55BEFB3C2D55A73200587E5B /* CraftifyUITests.xctest */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = Products;")
+    lines.append("\t\t\tsourceTree = \"<group>\";")
+    lines.append("\t\t};")
+
+    # Craftify Group
+    lines.append("\t\t55BEFB242D55A73000587E5B /* Craftify */ = {")
+    lines.append("\t\t\tisa = PBXGroup;")
+    lines.append("\t\t\tchildren = (")
+    lines.append("\t\t\t\t55BEFB262D55A73000587E5B /* Craftify.entitlements */,")
+    lines.append("\t\t\t\t55BEFB252D55A73000587E5B /* Info.plist */,")
+    for sf in swift_files:
+        fid = file_id("FIL1", sf)
+        lines.append(f"\t\t\t\t{fid} /* {sf} */,")
+    for res_name, _ in resources:
+        fid = file_id("FIL2", res_name)
+        lines.append(f"\t\t\t\t{fid} /* {res_name} */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tpath = Craftify;")
+    lines.append("\t\t\tsourceTree = \"<group>\";")
+    lines.append("\t\t};")
+
+    # CraftifyTests Group
+    lines.append("\t\t55BEFB352D55A73200587E5B /* CraftifyTests */ = {")
+    lines.append("\t\t\tisa = PBXGroup;")
+    lines.append("\t\t\tchildren = (")
+    for tf in tests_swift:
+        fid = file_id("FIL3", tf)
+        lines.append(f"\t\t\t\t{fid} /* {tf} */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tpath = CraftifyTests;")
+    lines.append("\t\t\tsourceTree = \"<group>\";")
+    lines.append("\t\t};")
+
+    # CraftifyUITests Group
+    lines.append("\t\t55BEFB3F2D55A73200587E5B /* CraftifyUITests */ = {")
+    lines.append("\t\t\tisa = PBXGroup;")
+    lines.append("\t\t\tchildren = (")
+    for utf in uitests_swift:
+        fid = file_id("FIL4", utf)
+        lines.append(f"\t\t\t\t{fid} /* {utf} */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tpath = CraftifyUITests;")
+    lines.append("\t\t\tsourceTree = \"<group>\";")
+    lines.append("\t\t};")
+    lines.append("/* End PBXGroup section */")
+    lines.append("")
+
+    # PBXNativeTarget section
+    lines.append("/* Begin PBXNativeTarget section */")
+    lines.append("\t\t55BEFB212D55A73000587E5B /* Craftify */ = {")
+    lines.append("\t\t\tisa = PBXNativeTarget;")
+    lines.append("\t\t\tbuildConfigurationList = 55BEFB462D55A73200587E5B /* Build configuration list for PBXNativeTarget \"Craftify\" */;")
+    lines.append("\t\t\tbuildPhases = (")
+    lines.append("\t\t\t\t55BEFB1E2D55A73000587E5B /* Sources */,")
+    lines.append("\t\t\t\t55BEFB1F2D55A73000587E5B /* Frameworks */,")
+    lines.append("\t\t\t\t55BEFB202D55A73000587E5B /* Resources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tbuildRules = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdependencies = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = Craftify;")
+    lines.append("\t\t\tproductName = Craftify;")
+    lines.append("\t\t\tproductReference = 55BEFB222D55A73000587E5B /* Craftify.app */;")
+    lines.append("\t\t\tproductType = \"com.apple.product-type.application\";")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB312D55A73200587E5B /* CraftifyTests */ = {")
+    lines.append("\t\t\tisa = PBXNativeTarget;")
+    lines.append("\t\t\tbuildConfigurationList = 55BEFB492D55A73200587E5B /* Build configuration list for PBXNativeTarget \"CraftifyTests\" */;")
+    lines.append("\t\t\tbuildPhases = (")
+    lines.append("\t\t\t\t55BEFB2E2D55A73200587E5B /* Sources */,")
+    lines.append("\t\t\t\t55BEFB2F2D55A73200587E5B /* Frameworks */,")
+    lines.append("\t\t\t\t55BEFB302D55A73200587E5B /* Resources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tbuildRules = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdependencies = (")
+    lines.append("\t\t\t\t55BEFB342D55A73200587E5B /* PBXTargetDependency */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = CraftifyTests;")
+    lines.append("\t\t\tproductName = CraftifyTests;")
+    lines.append("\t\t\tproductReference = 55BEFB322D55A73200587E5B /* CraftifyTests.xctest */;")
+    lines.append("\t\t\tproductType = \"com.apple.product-type.bundle.unit-test\";")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB3B2D55A73200587E5B /* CraftifyUITests */ = {")
+    lines.append("\t\t\tisa = PBXNativeTarget;")
+    lines.append("\t\t\tbuildConfigurationList = 55BEFB4C2D55A73200587E5B /* Build configuration list for PBXNativeTarget \"CraftifyUITests\" */;")
+    lines.append("\t\t\tbuildPhases = (")
+    lines.append("\t\t\t\t55BEFB382D55A73200587E5B /* Sources */,")
+    lines.append("\t\t\t\t55BEFB392D55A73200587E5B /* Frameworks */,")
+    lines.append("\t\t\t\t55BEFB3A2D55A73200587E5B /* Resources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tbuildRules = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdependencies = (")
+    lines.append("\t\t\t\t55BEFB3E2D55A73200587E5B /* PBXTargetDependency */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tname = CraftifyUITests;")
+    lines.append("\t\t\tproductName = CraftifyUITests;")
+    lines.append("\t\t\tproductReference = 55BEFB3C2D55A73200587E5B /* CraftifyUITests.xctest */;")
+    lines.append("\t\t\tproductType = \"com.apple.product-type.bundle.ui-testing\";")
+    lines.append("\t\t};")
+    lines.append("/* End PBXNativeTarget section */")
+    lines.append("")
+
+    # PBXProject section
+    lines.append("/* Begin PBXProject section */")
+    lines.append("\t\t55BEFB1A2D55A73000587E5B /* Project object */ = {")
+    lines.append("\t\t\tisa = PBXProject;")
+    lines.append("\t\t\tattributes = {")
+    lines.append("\t\t\t\tBuildIndependentTargetsInParallel = 1;")
+    lines.append("\t\t\t\tLastSwiftUpdateCheck = 1520;")
+    lines.append("\t\t\t\tLastUpgradeCheck = 1520;")
+    lines.append("\t\t\t\tORGANIZATIONNAME = \"Dave Van Cauwenberghe\";")
+    lines.append("\t\t\t\tTargetAttributes = {")
+    lines.append("\t\t\t\t\t55BEFB212D55A73000587E5B = {")
+    lines.append("\t\t\t\t\t\tCreatedOnToolsVersion = 15.2;")
+    lines.append("\t\t\t\t\t};")
+    lines.append("\t\t\t\t\t55BEFB312D55A73200587E5B = {")
+    lines.append("\t\t\t\t\t\tCreatedOnToolsVersion = 15.2;")
+    lines.append("\t\t\t\t\t\tTestTargetID = 55BEFB212D55A73000587E5B;")
+    lines.append("\t\t\t\t\t};")
+    lines.append("\t\t\t\t\t55BEFB3B2D55A73200587E5B = {")
+    lines.append("\t\t\t\t\t\tCreatedOnToolsVersion = 15.2;")
+    lines.append("\t\t\t\t\t\tTestTargetID = 55BEFB212D55A73000587E5B;")
+    lines.append("\t\t\t\t\t};")
+    lines.append("\t\t\t\t};")
+    lines.append("\t\t\t};")
+    lines.append("\t\t\tbuildConfigurationList = 55BEFB1D2D55A73000587E5B /* Build configuration list for PBXProject \"Craftify\" */;")
+    lines.append("\t\t\tdevelopmentRegion = en;")
+    lines.append("\t\t\thasScannedForEncodings = 0;")
+    lines.append("\t\t\tknownRegions = (")
+    lines.append("\t\t\t\ten,")
+    lines.append("\t\t\t\tBase,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tmainGroup = 55BEFB192D55A73000587E5B;")
+    lines.append("\t\t\tminimizedProjectReferenceProxies = 1;")
+    lines.append("\t\t\tpreferredProjectObjectVersion = 56;")
+    lines.append("\t\t\tproductRefGroup = 55BEFB232D55A73000587E5B /* Products */;")
+    lines.append("\t\t\tprojectDirPath = \"\";")
+    lines.append("\t\t\tprojectRoot = \"\";")
+    lines.append("\t\t\ttargets = (")
+    lines.append("\t\t\t\t55BEFB212D55A73000587E5B /* Craftify */,")
+    lines.append("\t\t\t\t55BEFB312D55A73200587E5B /* CraftifyTests */,")
+    lines.append("\t\t\t\t55BEFB3B2D55A73200587E5B /* CraftifyUITests */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t};")
+    lines.append("/* End PBXProject section */")
+    lines.append("")
+
+    # PBXResourcesBuildPhase section
+    lines.append("/* Begin PBXResourcesBuildPhase section */")
+    lines.append("\t\t55BEFB202D55A73000587E5B /* Resources */ = {")
+    lines.append("\t\t\tisa = PBXResourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    for res_name, _ in resources:
+        bid = file_id("BLD2", res_name)
+        lines.append(f"\t\t\t\t{bid} /* {res_name} in Resources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB302D55A73200587E5B /* Resources */ = {")
+    lines.append("\t\t\tisa = PBXResourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB3A2D55A73200587E5B /* Resources */ = {")
+    lines.append("\t\t\tisa = PBXResourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append("/* End PBXResourcesBuildPhase section */")
+    lines.append("")
+
+    # PBXSourcesBuildPhase section
+    lines.append("/* Begin PBXSourcesBuildPhase section */")
+    lines.append("\t\t55BEFB1E2D55A73000587E5B /* Sources */ = {")
+    lines.append("\t\t\tisa = PBXSourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    for sf in swift_files:
+        bid = file_id("BLD1", sf)
+        lines.append(f"\t\t\t\t{bid} /* {sf} in Sources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB2E2D55A73200587E5B /* Sources */ = {")
+    lines.append("\t\t\tisa = PBXSourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    for tf in tests_swift:
+        bid = file_id("BLD3", tf)
+        lines.append(f"\t\t\t\t{bid} /* {tf} in Sources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB382D55A73200587E5B /* Sources */ = {")
+    lines.append("\t\t\tisa = PBXSourcesBuildPhase;")
+    lines.append("\t\t\tfiles = (")
+    for utf in uitests_swift:
+        bid = file_id("BLD4", utf)
+        lines.append(f"\t\t\t\t{bid} /* {utf} in Sources */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\trunOnlyForDeploymentPostprocessing = 0;")
+    lines.append("\t\t};")
+    lines.append("/* End PBXSourcesBuildPhase section */")
+    lines.append("")
+
+    # PBXTargetDependency section
+    lines.append("/* Begin PBXTargetDependency section */")
+    lines.append("\t\t55BEFB342D55A73200587E5B /* PBXTargetDependency */ = {")
+    lines.append("\t\t\tisa = PBXTargetDependency;")
+    lines.append("\t\t\ttarget = 55BEFB212D55A73000587E5B /* Craftify */;")
+    lines.append("\t\t\ttargetProxy = 55BEFB332D55A73200587E5B /* PBXContainerItemProxy */;")
+    lines.append("\t\t};")
+    lines.append("\t\t55BEFB3E2D55A73200587E5B /* PBXTargetDependency */ = {")
+    lines.append("\t\t\tisa = PBXTargetDependency;")
+    lines.append("\t\t\ttarget = 55BEFB212D55A73000587E5B /* Craftify */;")
+    lines.append("\t\t\ttargetProxy = 55BEFB3D2D55A73200587E5B /* PBXContainerItemProxy */;")
+    lines.append("\t\t};")
+    lines.append("/* End PBXTargetDependency section */")
+    lines.append("")
+
+    # XCBuildConfiguration section
+    lines.append("/* Begin XCBuildConfiguration section */")
+    lines.append("\t\t55BEFB442D55A73200587E5B /* Debug configuration for PBXProject \"Craftify\" */ = {")
+    lines.append("\t\t\tisa = XCBuildConfiguration;")
+    lines.append("\t\t\tbuildSettings = {")
+    lines.append("\t\t\t\tALWAYS_SEARCH_USER_PATHS = NO;")
+    lines.append("\t\t\t\tASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;")
+    lines.append("\t\t\t\tCLANG_ANALYZER_NONNULL = YES;")
+    lines.append("\t\t\t\tCLANG_ENABLE_MODULES = YES;")
+    lines.append("\t\t\t\tCLANG_ENABLE_OBJC_ARC = YES;")
+    lines.append("\t\t\t\tENABLE_TESTABILITY = YES;")
+    lines.append("\t\t\t\tGCC_DYNAMIC_NO_PIC = NO;")
+    lines.append("\t\t\t\tGCC_OPTIMIZATION_LEVEL = 0;")
+    lines.append("\t\t\t\tGCC_PREPROCESSOR_DEFINITIONS = (")
+    lines.append("\t\t\t\t\t\"DEBUG=1\",")
+    lines.append("\t\t\t\t\t\"$(inherited)\",")
+    lines.append("\t\t\t\t);")
+    lines.append("\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.0;")
+    lines.append("\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 14.0;")
+    lines.append("\t\t\t\tMTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;")
+    lines.append("\t\t\t\tONLY_ACTIVE_ARCH = YES;")
+    lines.append("\t\t\t\tSDKROOT = iphoneos;")
+    lines.append("\t\t\t\tSWIFT_ACTIVE_COMPILATION_CONDITIONS = \"DEBUG $(inherited)\";")
+    lines.append("\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = \"-Onone\";")
+    lines.append("\t\t\t\tSWIFT_VERSION = 5.0;")
+    lines.append("\t\t\t};")
+    lines.append("\t\t\tname = Debug;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB452D55A73200587E5B /* Release configuration for PBXProject \"Craftify\" */ = {")
+    lines.append("\t\t\tisa = XCBuildConfiguration;")
+    lines.append("\t\t\tbuildSettings = {")
+    lines.append("\t\t\t\tALWAYS_SEARCH_USER_PATHS = NO;")
+    lines.append("\t\t\t\tASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;")
+    lines.append("\t\t\t\tCLANG_ENABLE_MODULES = YES;")
+    lines.append("\t\t\t\tCLANG_ENABLE_OBJC_ARC = YES;")
+    lines.append("\t\t\t\tENABLE_NS_ASSERTIONS = NO;")
+    lines.append("\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.0;")
+    lines.append("\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 14.0;")
+    lines.append("\t\t\t\tMTL_ENABLE_DEBUG_INFO = NO;")
+    lines.append("\t\t\t\tSDKROOT = iphoneos;")
+    lines.append("\t\t\t\tSWIFT_COMPILATION_MODE = wholemodule;")
+    lines.append("\t\t\t\tSWIFT_OPTIMIZATION_LEVEL = \"-O\";")
+    lines.append("\t\t\t\tSWIFT_VERSION = 5.0;")
+    lines.append("\t\t\t\tVALIDATE_PRODUCT = YES;")
+    lines.append("\t\t\t};")
+    lines.append("\t\t\tname = Release;")
+    lines.append("\t\t};")
+
+    # Native target Craftify configurations
+    for conf_name, conf_id in [("Debug", "55BEFB472D55A73200587E5B"), ("Release", "55BEFB482D55A73200587E5B")]:
+        lines.append(f"\t\t{conf_id} /* {conf_name} configuration for PBXNativeTarget \"Craftify\" */ = {{")
+        lines.append("\t\t\tisa = XCBuildConfiguration;")
+        lines.append("\t\t\tbuildSettings = {")
+        lines.append("\t\t\t\tASSETCATALOG_COMPILER_APPICON_NAME = Craftify;")
+        lines.append("\t\t\t\tASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;")
+        lines.append("\t\t\t\tASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;")
+        lines.append("\t\t\t\tCODE_SIGN_ENTITLEMENTS = Craftify/Craftify.entitlements;")
+        lines.append("\t\t\t\tCODE_SIGN_STYLE = Automatic;")
+        lines.append("\t\t\t\tCURRENT_PROJECT_VERSION = 125;")
+        lines.append("\t\t\t\tGENERATE_INFOPLIST_FILE = YES;")
+        lines.append("\t\t\t\tINFOPLIST_FILE = Craftify/Info.plist;")
+        lines.append("\t\t\t\tINFOPLIST_KEY_CFBundleDisplayName = Craftify;")
+        lines.append("\t\t\t\tINFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;")
+        lines.append("\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.0;")
+        lines.append("\t\t\t\tMACOSX_DEPLOYMENT_TARGET = 14.0;")
+        lines.append("\t\t\t\tLD_RUNPATH_SEARCH_PATHS = (")
+        lines.append("\t\t\t\t\t\"$(inherited)\",")
+        lines.append("\t\t\t\t\t\"@executable_path/Frameworks\",")
+        lines.append("\t\t\t\t);")
+        lines.append("\t\t\t\tMARKETING_VERSION = 1.1;")
+        lines.append("\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;")
+        lines.append("\t\t\t\tPRODUCT_NAME = \"$(TARGET_NAME)\";")
+        lines.append("\t\t\t\tSUPPORTED_PLATFORMS = \"iphoneos iphonesimulator macosx\";")
+        lines.append("\t\t\t\tSUPPORTS_MACCATALYST = YES;")
+        lines.append("\t\t\t\tSUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;")
+        lines.append("\t\t\t\tSWIFT_VERSION = 5.0;")
+        lines.append("\t\t\t\tTARGETED_DEVICE_FAMILY = \"1,2,6\";")
+        lines.append("\t\t\t};")
+        lines.append(f"\t\t\tname = {conf_name};")
+        lines.append("\t\t};")
+
+    # Tests config
+    for conf_name, conf_id in [("Debug", "55BEFB4A2D55A73200587E5B"), ("Release", "55BEFB4B2D55A73200587E5B")]:
+        lines.append(f"\t\t{conf_id} /* {conf_name} configuration for PBXNativeTarget \"CraftifyTests\" */ = {{")
+        lines.append("\t\t\tisa = XCBuildConfiguration;")
+        lines.append("\t\t\tbuildSettings = {")
+        lines.append("\t\t\t\tBUNDLE_LOADER = \"$(TEST_HOST)\";")
+        lines.append("\t\t\t\tGENERATE_INFOPLIST_FILE = YES;")
+        lines.append("\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.0;")
+        lines.append("\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyTests;")
+        lines.append("\t\t\t\tPRODUCT_NAME = \"$(TARGET_NAME)\";")
+        lines.append("\t\t\t\tSWIFT_VERSION = 5.0;")
+        lines.append("\t\t\t\tTEST_HOST = \"$(BUILT_PRODUCTS_DIR)/Craftify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Craftify\";")
+        lines.append("\t\t\t};")
+        lines.append(f"\t\t\tname = {conf_name};")
+        lines.append("\t\t};")
+
+    # UITests config
+    for conf_name, conf_id in [("Debug", "55BEFB4D2D55A73200587E5B"), ("Release", "55BEFB4E2D55A73200587E5B")]:
+        lines.append(f"\t\t{conf_id} /* {conf_name} configuration for PBXNativeTarget \"CraftifyUITests\" */ = {{")
+        lines.append("\t\t\tisa = XCBuildConfiguration;")
+        lines.append("\t\t\tbuildSettings = {")
+        lines.append("\t\t\t\tGENERATE_INFOPLIST_FILE = YES;")
+        lines.append("\t\t\t\tIPHONEOS_DEPLOYMENT_TARGET = 17.0;")
+        lines.append("\t\t\t\tPRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyUITests;")
+        lines.append("\t\t\t\tPRODUCT_NAME = \"$(TARGET_NAME)\";")
+        lines.append("\t\t\t\tSWIFT_VERSION = 5.0;")
+        lines.append("\t\t\t\tTEST_TARGET_NAME = Craftify;")
+        lines.append("\t\t\t};")
+        lines.append(f"\t\t\tname = {conf_name};")
+        lines.append("\t\t};")
+    lines.append("/* End XCBuildConfiguration section */")
+    lines.append("")
+
+    # XCConfigurationList section
+    lines.append("/* Begin XCConfigurationList section */")
+    lines.append("\t\t55BEFB1D2D55A73000587E5B /* Build configuration list for PBXProject \"Craftify\" */ = {")
+    lines.append("\t\t\tisa = XCConfigurationList;")
+    lines.append("\t\t\tbuildConfigurations = (")
+    lines.append("\t\t\t\t55BEFB442D55A73200587E5B /* Debug */,")
+    lines.append("\t\t\t\t55BEFB452D55A73200587E5B /* Release */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
+    lines.append("\t\t\tdefaultConfigurationName = Release;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB462D55A73200587E5B /* Build configuration list for PBXNativeTarget \"Craftify\" */ = {")
+    lines.append("\t\t\tisa = XCConfigurationList;")
+    lines.append("\t\t\tbuildConfigurations = (")
+    lines.append("\t\t\t\t55BEFB472D55A73200587E5B /* Debug */,")
+    lines.append("\t\t\t\t55BEFB482D55A73200587E5B /* Release */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
+    lines.append("\t\t\tdefaultConfigurationName = Release;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB492D55A73200587E5B /* Build configuration list for PBXNativeTarget \"CraftifyTests\" */ = {")
+    lines.append("\t\t\tisa = XCConfigurationList;")
+    lines.append("\t\t\tbuildConfigurations = (")
+    lines.append("\t\t\t\t55BEFB4A2D55A73200587E5B /* Debug */,")
+    lines.append("\t\t\t\t55BEFB4B2D55A73200587E5B /* Release */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
+    lines.append("\t\t\tdefaultConfigurationName = Release;")
+    lines.append("\t\t};")
+
+    lines.append("\t\t55BEFB4C2D55A73200587E5B /* Build configuration list for PBXNativeTarget \"CraftifyUITests\" */ = {")
+    lines.append("\t\t\tisa = XCConfigurationList;")
+    lines.append("\t\t\tbuildConfigurations = (")
+    lines.append("\t\t\t\t55BEFB4D2D55A73200587E5B /* Debug */,")
+    lines.append("\t\t\t\t55BEFB4E2D55A73200587E5B /* Release */,")
+    lines.append("\t\t\t);")
+    lines.append("\t\t\tdefaultConfigurationIsVisible = 0;")
+    lines.append("\t\t\tdefaultConfigurationName = Release;")
+    lines.append("\t\t};")
+    lines.append("/* End XCConfigurationList section */")
+    lines.append("")
+
+    lines.append("\t};")
+    lines.append("\trootObject = 55BEFB1A2D55A73000587E5B /* Project object */;")
+    lines.append("}")
+    lines.append("")
+
+    with open("Craftify.xcodeproj/project.pbxproj", "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print("[Craftify] Generated Xcode 15/16/26 compatible project.pbxproj successfully!")
+
+if __name__ == "__main__":
+    main()

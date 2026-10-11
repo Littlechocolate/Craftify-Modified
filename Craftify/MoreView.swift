@@ -39,7 +39,7 @@ struct MoreView: View {
                         symbol: "hammer.circle.fill"
                     )
 
-                    syncCard
+                    recipeVersionCard
 
                     CraftifySectionHeader(
                         title: "Tools & Help",
@@ -48,16 +48,28 @@ struct MoreView: View {
 
                     LazyVGrid(columns: dashboardColumns, spacing: 14) {
                         destination(
-                            "Report an Issue",
-                            detail: "Request a missing recipe or flag an error.",
-                            systemImage: "exclamationmark.bubble.fill"
-                        ) { ReportRecipeView() }
+                            "Recipe Versions",
+                            detail: "Import .recipe files, switch versions, and manage duplicates.",
+                            systemImage: "square.stack.3d.up.fill"
+                        ) { RecipeImportView() }
+
+                        destination(
+                            "Recipe Extractor (macOS)",
+                            detail: "Extract full recipes from server.jar using Java data generator.",
+                            systemImage: "hammer.fill"
+                        ) { RecipeExtractorView() }
 
                         destination(
                             "Console Commands",
                             detail: "Browse commands for Bedrock and Java Edition.",
                             systemImage: "terminal.fill"
                         ) { CommandsView() }
+
+                        destination(
+                            "Report an Issue",
+                            detail: "Request a missing recipe or flag an error.",
+                            systemImage: "exclamationmark.bubble.fill"
+                        ) { ReportRecipeView() }
 
                         destination(
                             "App Appearance",
@@ -103,17 +115,17 @@ struct MoreView: View {
         }
     }
 
-    private var syncCard: some View {
+    private var recipeVersionCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(alignment: .top, spacing: 14) {
                 CraftifyIconTile(
-                    symbol: dataManager.isConnected ? "icloud.and.arrow.down.fill" : "icloud.slash.fill",
+                    symbol: "square.stack.3d.up.fill",
                     size: 48
                 )
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Recipe Book Sync")
+                    Text("Local Recipe Library")
                         .font(.title3.bold())
-                    Text("Download new recipes and image updates for reliable offline access.")
+                    Text("Import .recipe files or extract recipes directly from Minecraft server.jar.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -124,38 +136,26 @@ struct MoreView: View {
                 VStack(alignment: .leading, spacing: 9) { syncPills }
             }
 
-            Text(syncDetail)
+            Text(dataManager.syncStatus)
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 
-            Button(action: syncRecipes) {
-                Label(
-                    dataManager.isLoading ? "Syncing Recipes & Images…" : "Sync Recipes & Images",
-                    systemImage: dataManager.isLoading ? "hourglass" : "arrow.clockwise"
-                )
-                .font(.subheadline.weight(.semibold))
-                .frame(maxWidth: .infinity, minHeight: 42)
-            }
-            .buttonStyle(.borderedProminent)
-            .craftifyButtonBorder(cornerRadius: 16)
-            .disabled(dataManager.isLoading || !dataManager.isConnected || remainingCooldownTime > 0)
-            .accessibilityHint(syncHint)
+            HStack(spacing: 12) {
+                NavigationLink(destination: RecipeImportView()) {
+                    Label("Manage Versions", systemImage: "folder.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.borderedProminent)
+                .craftifyButtonBorder(cornerRadius: 14)
 
-            if remainingCooldownTime > 0 {
-                Label(
-                    "Sync is available again in \(remainingCooldownTime) second\(remainingCooldownTime == 1 ? "" : "s").",
-                    systemImage: "timer"
-                )
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .contentTransition(.numericText())
-            } else if !dataManager.isConnected {
-                Label(
-                    "You’re offline. Your downloaded recipe book remains available.",
-                    systemImage: "wifi.slash"
-                )
-                .font(.footnote)
-                .foregroundStyle(.orange)
+                NavigationLink(destination: RecipeExtractorView()) {
+                    Label("Recipe Extractor", systemImage: "hammer.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity, minHeight: 40)
+                }
+                .buttonStyle(.bordered)
+                .craftifyButtonBorder(cornerRadius: 14)
             }
         }
         .padding(18)
@@ -165,9 +165,9 @@ struct MoreView: View {
     @ViewBuilder
     private var syncPills: some View {
         CraftifyStatusPill(
-            title: dataManager.isConnected ? "Online" : "Offline",
-            symbol: dataManager.isConnected ? "wifi" : "wifi.slash",
-            tint: dataManager.isConnected ? .green : .red
+            title: "Offline Ready",
+            symbol: "checkmark.circle.fill",
+            tint: .green
         )
         CraftifyStatusPill(
             title: "\(dataManager.recipes.count.formatted()) recipes",

@@ -20,6 +20,7 @@ struct AccentColorOption: Identifiable {
     let color: Color
 }
 
+@MainActor
 struct AppAppearanceView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

@@ -1,0 +1,137 @@
+name: Build Craftify iOS IPA & ZIP for LiveContainer
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build iOS IPA & ZIP
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode Version
+        run: |
+          echo "Available Xcode installations:"
+          ls -d /Applications/Xcode*.app || true
+          if [ -d "/Applications/Xcode_15.4.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_15.4.app
+          elif [ -d "/Applications/Xcode_16.0.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_16.0.app
+          fi
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+
+      - name: Configure Xcode Project
+        run: |
+          python3 scripts/setup_xcode_project.py
+
+      - name: Build Craftify for iOS (arm64)
+        run: |
+          xcodebuild clean build \
+            -scheme Craftify \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -configuration Release \
+            -derivedDataPath ./build-output \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
+
+      - name: Package Unencrypted IPA & ZIP for LiveContainer
+        run: |
+          APP_PATH="./build-output/Build/Products/Release-iphoneos/Craftify.app"
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Error: Craftify.app not found at $APP_PATH"
+            find ./build-output -name "Craftify.app"
+            exit 1
+          fi
+
+          echo "Found compiled app at: $APP_PATH"
+          echo "Inspecting Mach-O binary info:"
+          file "$APP_PATH/Craftify"
+
+          echo "Preparing Payload directory..."
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+
+          # Ensure binary is executable
+          chmod +x Payload/Craftify.app/Craftify
+
+          # Ensure Info.plist exists and contains CFBundleExecutable
+          if [ ! -f "Payload/Craftify.app/Info.plist" ]; then
+            echo "Error: Info.plist not found in Payload/Craftify.app!"
+            exit 1
+          fi
+          echo "Info.plist CFBundleExecutable:"
+          /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" Payload/Craftify.app/Info.plist || true
+          echo "Info.plist CFBundleIdentifier:"
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" Payload/Craftify.app/Info.plist || true
+
+          # Ad-hoc sign the app bundle for LiveContainer compatibility
+          echo "Applying ad-hoc code signature..."
+          codesign --force --deep --sign - Payload/Craftify.app
+
+          # Package as .ipa
+          echo "Creating Craftify.ipa..."
+          zip -qr Craftify.ipa Payload
+
+          # Create .zip copy as requested by user for easier transfer
+          echo "Creating Craftify.zip for transmission..."
+          cp Craftify.ipa Craftify.zip
+
+          # Verify package contents
+          echo "IPA archive contents (top-level):"
+          unzip -l Craftify.ipa | head -n 25
+
+          echo "File sizes:"
+          ls -lh Craftify.ipa Craftify.zip
+
+          # Generate checksums
+          shasum -a 256 Craftify.ipa Craftify.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Craftify-LiveContainer-Release
+          path: |
+            Craftify.ipa
+            Craftify.zip
+            SHA256SUMS.txt
+          retention-days: 14
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: github.ref == 'refs/heads/main'
+        with:
+          tag_name: "v1.1.0-livecontainer"
+          name: "Craftify v1.1.0 for LiveContainer (iOS 18.5+)"
+          body: |
+            ### Craftify iOS 离线配方版 (LiveContainer 适用)
+
+            **版本特性**：
+            - 完全移除 CloudKit 依赖，支持本地 `.recipe` 配方库
+            - 预置 Minecraft 1.21.1 (1,290 配方) 与 26w14a (1,513 配方)
+            - 遵循 Minecraft Wiki 官方游戏内分类 (Building Blocks, Equipment, Redstone, Food & Cooking, Misc)
+            - 设置页内置多版本切换与配方导入冲突解决器 (替换 / 同时保留 / 取消)
+            - 适配 LiveContainer iOS 18.5（标准 `Payload/Craftify.app` 扁平目录结构，已解决 `Unknown.app/(null)` 问题）
+
+            **安装说明**：
+            - 可以直接下载 `Craftify.zip`（或 `Craftify.ipa`）。
+            - 在 iOS 设备上使用 LiveContainer 导入即可正常运行。
+          files: |
+            Craftify.ipa
+            Craftify.zip
+            SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,6 +8,7 @@
 import SwiftUI
 import UIKit
 
+@MainActor
 struct ContentView: View {
     @EnvironmentObject private var dataManager: DataManager
     @AppStorage("colorSchemePreference") private var colorSchemePreference = "system"
@@ -103,6 +104,7 @@ struct ContentView: View {
     }
 }
 
+@MainActor
 struct RecipesTabView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.craftifyAccentColor) private var accent
@@ -150,6 +152,7 @@ struct RecipesTabView: View {
     }
 }
 
+@MainActor
 struct CategoryView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -201,6 +204,7 @@ struct CategoryView: View {
     }
 }
 
+@MainActor
 struct CategoryFilterBar: View {
     @Binding var selectedCategory: String?
     let categories: [String]
@@ -217,7 +221,7 @@ struct CategoryFilterBar: View {
             HStack(spacing: 8) {
                 filterButton(title: "All", symbol: "square.grid.2x2", category: nil)
                 ForEach(categories, id: \.self) { category in
-                    filterButton(title: category, symbol: "cube.fill", category: category)
+                    filterButton(title: category, symbol: DataManager.categorySymbol(for: category), category: category)
                 }
             }
             .padding(7)
@@ -251,6 +255,7 @@ struct CategoryFilterBar: View {
     }
 }
 
+@MainActor
 struct RecipeListView: View {
     @EnvironmentObject private var dataManager: DataManager
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -340,6 +345,7 @@ struct RecipeListView: View {
     }
 }
 
+@MainActor
 struct RecipeCell: View {
     let recipe: Recipe
     let isCraftifyPick: Bool
@@ -427,6 +433,7 @@ struct RecipeCell: View {
     }
 }
 
+@MainActor
 struct CraftifyPicksHeader: View {
     let isExpanded: Bool
     let toggle: () -> Void

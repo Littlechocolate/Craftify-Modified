@@ -3,8 +3,42 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 110;
+	objectVersion = 56;
 	objects = {
+
+/* Begin PBXBuildFile section */
+		BLD1D8F12E98BFF24A610393 /* AppAppearanceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1E4DCCD6659C7AF4EB4F3 /* AppAppearanceView.swift */; };
+		BLD14AFED1D4E9C1B35F481A /* ChestsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL170AC6A9B1D8888AFEB6E /* ChestsView.swift */; };
+		BLD1690CF9298A581F2BF4DE /* ColorExtension.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1B05E99DE79B9AB1B0A51 /* ColorExtension.swift */; };
+		BLD16C7E69B77ADE6BD31105 /* CommandsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL189BC94DDBC239C826278 /* CommandsView.swift */; };
+		BLD1A33E37F9A3D5B0C61557 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL142F9E149BBD376A2882A /* ContentView.swift */; };
+		BLD173DE04022FAFDC174B1A /* CraftImageStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1107D60C07321D8CAF969 /* CraftImageStore.swift */; };
+		BLD192BBE21A6CA86AEC7F76 /* CraftifyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1CA777F24AC76DF825E38 /* CraftifyApp.swift */; };
+		BLD180C153EDDED3406063FF /* CraftifyDesignSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1B2D7397A13B1DD803A80 /* CraftifyDesignSystem.swift */; };
+		BLD10C9BBB29FDC7F8BC516A /* DataManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1058B301ADF1328E0D98A /* DataManager.swift */; };
+		BLD1BCD4C6781B455DDD562C /* EmptyRecipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1614F147B0E9AC5ECCCC0 /* EmptyRecipeView.swift */; };
+		BLD152CA9BD3DF86038231B6 /* HapticFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL15FD52A95EE8330078DDA /* HapticFeedback.swift */; };
+		BLD1AAC0C12DAF21A8912DE7 /* MoreView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL12A4B0246619FFABF5473 /* MoreView.swift */; };
+		BLD1CE6B3B84FCD998057EC3 /* OnboardingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1D2AE9C5DFFC69D0D108E /* OnboardingView.swift */; };
+		BLD1804B2F5FBD0E535E7EEC /* RecipeDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL112B5E7C46472D26BB526 /* RecipeDetailView.swift */; };
+		BLD18686183CB53DA8D078E0 /* RecipeExtractorService.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1E6E7EE247B42303FB090 /* RecipeExtractorService.swift */; };
+		BLD161135FE77CF54B2B9287 /* RecipeExtractorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL12429AB6D0BBFECCDAA29 /* RecipeExtractorView.swift */; };
+		BLD1EF58E7B14F72E4A05F7C /* RecipeImportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL18381E8F1E45FF62DE525 /* RecipeImportView.swift */; };
+		BLD1CBFAEF6E29016FC49604 /* RecipeSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL17C113C13AD8AB6595B47 /* RecipeSearchView.swift */; };
+		BLD18BDAE4D4A178325A4B45 /* RecipeVersionManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL110BA0B27DF75097F05B7 /* RecipeVersionManager.swift */; };
+		BLD102D599C7C98EA3A5255D /* Recipes.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1B17579AF125D0669A144 /* Recipes.swift */; };
+		BLD1547EE436736D64CAE21D /* ReleaseNotesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL12B129050CB68BC4EF98B /* ReleaseNotesView.swift */; };
+		BLD1F5EF1361FDC65EA4F14D /* ReportRecipeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL1A60B6484F147AFDB1A59 /* ReportRecipeView.swift */; };
+		BLD14DEF15A199BAD0A3ED3E /* SupportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL16088CF04EC04E83BFC52 /* SupportView.swift */; };
+		BLD1271CA54EFD5A9CEC5EB6 /* SyncOverlayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */; };
+		BLD294F19B2BB219576F86A2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */; };
+		BLD29BC58ECA61A7E561CA17 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */; };
+		BLD2FD5ED0F9E12FC9AF92DA /* CraftifyModel.xcdatamodeld in Resources */ = {isa = PBXBuildFile; fileRef = FIL2D4F438057705D12E6C34 /* CraftifyModel.xcdatamodeld */; };
+		BLD23D5F034471E1AB6E7798 /* Resources in Resources */ = {isa = PBXBuildFile; fileRef = FIL2D496F1F8C7F914199ED4 /* Resources */; };
+		BLD3A2D4BBEE22A1EA80964D /* CraftifyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL37753585A5069226B36B1 /* CraftifyTests.swift */; };
+		BLD4D81EDCC773BD48BC1233 /* CraftifyUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL4325C7FBCDC3029BAEEFE /* CraftifyUITests.swift */; };
+		BLD4E0E1FE7326B0921D7B54 /* CraftifyUITestsLaunchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FIL41718E9ED107755F86280 /* CraftifyUITestsLaunchTests.swift */; };
+/* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		55BEFB332D55A73200587E5B /* PBXContainerItemProxy */ = {
@@ -23,69 +57,63 @@
 		};
 /* End PBXContainerItemProxy section */
 
-/* Begin PBXCopyFilesBuildPhase section */
-		5541C83B2DD7B61300478D7A /* Embed Watch Content */ = {
-			isa = PBXCopyFilesBuildPhase;
-			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
-			dstSubfolder = Product;
-			files = (
-			);
-			name = "Embed Watch Content";
-		};
-/* End PBXCopyFilesBuildPhase section */
-
 /* Begin PBXFileReference section */
 		55BEFB222D55A73000587E5B /* Craftify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Craftify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		55BEFB322D55A73200587E5B /* CraftifyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraftifyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		55BEFB3C2D55A73200587E5B /* CraftifyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CraftifyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		55BEFB252D55A73000587E5B /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		55BEFB262D55A73000587E5B /* Craftify.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Craftify.entitlements; sourceTree = "<group>"; };
+		FIL1E4DCCD6659C7AF4EB4F3 /* AppAppearanceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppAppearanceView.swift; sourceTree = "<group>"; };
+		FIL170AC6A9B1D8888AFEB6E /* ChestsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChestsView.swift; sourceTree = "<group>"; };
+		FIL1B05E99DE79B9AB1B0A51 /* ColorExtension.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ColorExtension.swift; sourceTree = "<group>"; };
+		FIL189BC94DDBC239C826278 /* CommandsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommandsView.swift; sourceTree = "<group>"; };
+		FIL142F9E149BBD376A2882A /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		FIL1107D60C07321D8CAF969 /* CraftImageStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftImageStore.swift; sourceTree = "<group>"; };
+		FIL1CA777F24AC76DF825E38 /* CraftifyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyApp.swift; sourceTree = "<group>"; };
+		FIL1B2D7397A13B1DD803A80 /* CraftifyDesignSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyDesignSystem.swift; sourceTree = "<group>"; };
+		FIL1058B301ADF1328E0D98A /* DataManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataManager.swift; sourceTree = "<group>"; };
+		FIL1614F147B0E9AC5ECCCC0 /* EmptyRecipeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EmptyRecipeView.swift; sourceTree = "<group>"; };
+		FIL15FD52A95EE8330078DDA /* HapticFeedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HapticFeedback.swift; sourceTree = "<group>"; };
+		FIL12A4B0246619FFABF5473 /* MoreView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreView.swift; sourceTree = "<group>"; };
+		FIL1D2AE9C5DFFC69D0D108E /* OnboardingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingView.swift; sourceTree = "<group>"; };
+		FIL112B5E7C46472D26BB526 /* RecipeDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeDetailView.swift; sourceTree = "<group>"; };
+		FIL1E6E7EE247B42303FB090 /* RecipeExtractorService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeExtractorService.swift; sourceTree = "<group>"; };
+		FIL12429AB6D0BBFECCDAA29 /* RecipeExtractorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeExtractorView.swift; sourceTree = "<group>"; };
+		FIL18381E8F1E45FF62DE525 /* RecipeImportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeImportView.swift; sourceTree = "<group>"; };
+		FIL17C113C13AD8AB6595B47 /* RecipeSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeSearchView.swift; sourceTree = "<group>"; };
+		FIL110BA0B27DF75097F05B7 /* RecipeVersionManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecipeVersionManager.swift; sourceTree = "<group>"; };
+		FIL1B17579AF125D0669A144 /* Recipes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Recipes.swift; sourceTree = "<group>"; };
+		FIL12B129050CB68BC4EF98B /* ReleaseNotesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReleaseNotesView.swift; sourceTree = "<group>"; };
+		FIL1A60B6484F147AFDB1A59 /* ReportRecipeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportRecipeView.swift; sourceTree = "<group>"; };
+		FIL16088CF04EC04E83BFC52 /* SupportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupportView.swift; sourceTree = "<group>"; };
+		FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncOverlayView.swift; sourceTree = "<group>"; };
+		FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; path = LaunchScreen.storyboard; sourceTree = "<group>"; };
+		FIL2D4F438057705D12E6C34 /* CraftifyModel.xcdatamodeld */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcdatamodel; path = CraftifyModel.xcdatamodeld; sourceTree = "<group>"; };
+		FIL2D496F1F8C7F914199ED4 /* Resources */ = {isa = PBXFileReference; lastKnownFileType = folder; path = Resources; sourceTree = "<group>"; };
+		FIL37753585A5069226B36B1 /* CraftifyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyTests.swift; sourceTree = "<group>"; };
+		FIL4325C7FBCDC3029BAEEFE /* CraftifyUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyUITests.swift; sourceTree = "<group>"; };
+		FIL41718E9ED107755F86280 /* CraftifyUITestsLaunchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CraftifyUITestsLaunchTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
-
-/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		55CB3BB02D55BC4200CB4402 /* Exceptions for "Craftify" folder in "Craftify" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = 55BEFB212D55A73000587E5B /* Craftify */;
-		};
-/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
-
-/* Begin PBXFileSystemSynchronizedRootGroup section */
-		55BEFB242D55A73000587E5B /* Craftify */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			exceptions = (
-				55CB3BB02D55BC4200CB4402 /* Exceptions for "Craftify" folder in "Craftify" target */,
-			);
-			path = Craftify;
-			sourceTree = "<group>";
-		};
-		55BEFB352D55A73200587E5B /* CraftifyTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CraftifyTests;
-			sourceTree = "<group>";
-		};
-		55BEFB3F2D55A73200587E5B /* CraftifyUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = CraftifyUITests;
-			sourceTree = "<group>";
-		};
-/* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		55BEFB1F2D55A73000587E5B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB2F2D55A73200587E5B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB392D55A73200587E5B /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
@@ -110,6 +138,60 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		55BEFB242D55A73000587E5B /* Craftify */ = {
+			isa = PBXGroup;
+			children = (
+				55BEFB262D55A73000587E5B /* Craftify.entitlements */,
+				55BEFB252D55A73000587E5B /* Info.plist */,
+				FIL1E4DCCD6659C7AF4EB4F3 /* AppAppearanceView.swift */,
+				FIL170AC6A9B1D8888AFEB6E /* ChestsView.swift */,
+				FIL1B05E99DE79B9AB1B0A51 /* ColorExtension.swift */,
+				FIL189BC94DDBC239C826278 /* CommandsView.swift */,
+				FIL142F9E149BBD376A2882A /* ContentView.swift */,
+				FIL1107D60C07321D8CAF969 /* CraftImageStore.swift */,
+				FIL1CA777F24AC76DF825E38 /* CraftifyApp.swift */,
+				FIL1B2D7397A13B1DD803A80 /* CraftifyDesignSystem.swift */,
+				FIL1058B301ADF1328E0D98A /* DataManager.swift */,
+				FIL1614F147B0E9AC5ECCCC0 /* EmptyRecipeView.swift */,
+				FIL15FD52A95EE8330078DDA /* HapticFeedback.swift */,
+				FIL12A4B0246619FFABF5473 /* MoreView.swift */,
+				FIL1D2AE9C5DFFC69D0D108E /* OnboardingView.swift */,
+				FIL112B5E7C46472D26BB526 /* RecipeDetailView.swift */,
+				FIL1E6E7EE247B42303FB090 /* RecipeExtractorService.swift */,
+				FIL12429AB6D0BBFECCDAA29 /* RecipeExtractorView.swift */,
+				FIL18381E8F1E45FF62DE525 /* RecipeImportView.swift */,
+				FIL17C113C13AD8AB6595B47 /* RecipeSearchView.swift */,
+				FIL110BA0B27DF75097F05B7 /* RecipeVersionManager.swift */,
+				FIL1B17579AF125D0669A144 /* Recipes.swift */,
+				FIL12B129050CB68BC4EF98B /* ReleaseNotesView.swift */,
+				FIL1A60B6484F147AFDB1A59 /* ReportRecipeView.swift */,
+				FIL16088CF04EC04E83BFC52 /* SupportView.swift */,
+				FIL170F9D8A677B3BB177DE1 /* SyncOverlayView.swift */,
+				FIL290B22E6F09C5A7473DC3 /* Assets.xcassets */,
+				FIL2B76F9C86AC3B880C1D96 /* LaunchScreen.storyboard */,
+				FIL2D4F438057705D12E6C34 /* CraftifyModel.xcdatamodeld */,
+				FIL2D496F1F8C7F914199ED4 /* Resources */,
+			);
+			path = Craftify;
+			sourceTree = "<group>";
+		};
+		55BEFB352D55A73200587E5B /* CraftifyTests */ = {
+			isa = PBXGroup;
+			children = (
+				FIL37753585A5069226B36B1 /* CraftifyTests.swift */,
+			);
+			path = CraftifyTests;
+			sourceTree = "<group>";
+		};
+		55BEFB3F2D55A73200587E5B /* CraftifyUITests */ = {
+			isa = PBXGroup;
+			children = (
+				FIL4325C7FBCDC3029BAEEFE /* CraftifyUITests.swift */,
+				FIL41718E9ED107755F86280 /* CraftifyUITestsLaunchTests.swift */,
+			);
+			path = CraftifyUITests;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -120,12 +202,10 @@
 				55BEFB1E2D55A73000587E5B /* Sources */,
 				55BEFB1F2D55A73000587E5B /* Frameworks */,
 				55BEFB202D55A73000587E5B /* Resources */,
-				5541C83B2DD7B61300478D7A /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
-			fileSystemSynchronizedGroups = (
-				55BEFB242D55A73000587E5B /* Craftify */,
+			dependencies = (
 			);
 			name = Craftify;
 			productName = Craftify;
@@ -145,9 +225,6 @@
 			dependencies = (
 				55BEFB342D55A73200587E5B /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				55BEFB352D55A73200587E5B /* CraftifyTests */,
-			);
 			name = CraftifyTests;
 			productName = CraftifyTests;
 			productReference = 55BEFB322D55A73200587E5B /* CraftifyTests.xctest */;
@@ -166,9 +243,6 @@
 			dependencies = (
 				55BEFB3E2D55A73200587E5B /* PBXTargetDependency */,
 			);
-			fileSystemSynchronizedGroups = (
-				55BEFB3F2D55A73200587E5B /* CraftifyUITests */,
-			);
 			name = CraftifyUITests;
 			productName = CraftifyUITests;
 			productReference = 55BEFB3C2D55A73200587E5B /* CraftifyUITests.xctest */;
@@ -181,19 +255,19 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 1630;
-				LastUpgradeCheck = 2600;
+				LastSwiftUpdateCheck = 1520;
+				LastUpgradeCheck = 1520;
 				ORGANIZATIONNAME = "Dave Van Cauwenberghe";
 				TargetAttributes = {
 					55BEFB212D55A73000587E5B = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.2;
 					};
 					55BEFB312D55A73200587E5B = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.2;
 						TestTargetID = 55BEFB212D55A73000587E5B;
 					};
 					55BEFB3B2D55A73200587E5B = {
-						CreatedOnToolsVersion = 16.2;
+						CreatedOnToolsVersion = 15.2;
 						TestTargetID = 55BEFB212D55A73000587E5B;
 					};
 				};
@@ -207,7 +281,7 @@
 			);
 			mainGroup = 55BEFB192D55A73000587E5B;
 			minimizedProjectReferenceProxies = 1;
-			preferredProjectObjectVersion = 110;
+			preferredProjectObjectVersion = 56;
 			productRefGroup = 55BEFB232D55A73000587E5B /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
@@ -223,17 +297,24 @@
 		55BEFB202D55A73000587E5B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				BLD294F19B2BB219576F86A2 /* Assets.xcassets in Resources */,
+				BLD29BC58ECA61A7E561CA17 /* LaunchScreen.storyboard in Resources */,
+				BLD2FD5ED0F9E12FC9AF92DA /* CraftifyModel.xcdatamodeld in Resources */,
+				BLD23D5F034471E1AB6E7798 /* Resources in Resources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB302D55A73200587E5B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB3A2D55A73200587E5B /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
@@ -241,17 +322,47 @@
 		55BEFB1E2D55A73000587E5B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				BLD1D8F12E98BFF24A610393 /* AppAppearanceView.swift in Sources */,
+				BLD14AFED1D4E9C1B35F481A /* ChestsView.swift in Sources */,
+				BLD1690CF9298A581F2BF4DE /* ColorExtension.swift in Sources */,
+				BLD16C7E69B77ADE6BD31105 /* CommandsView.swift in Sources */,
+				BLD1A33E37F9A3D5B0C61557 /* ContentView.swift in Sources */,
+				BLD173DE04022FAFDC174B1A /* CraftImageStore.swift in Sources */,
+				BLD192BBE21A6CA86AEC7F76 /* CraftifyApp.swift in Sources */,
+				BLD180C153EDDED3406063FF /* CraftifyDesignSystem.swift in Sources */,
+				BLD10C9BBB29FDC7F8BC516A /* DataManager.swift in Sources */,
+				BLD1BCD4C6781B455DDD562C /* EmptyRecipeView.swift in Sources */,
+				BLD152CA9BD3DF86038231B6 /* HapticFeedback.swift in Sources */,
+				BLD1AAC0C12DAF21A8912DE7 /* MoreView.swift in Sources */,
+				BLD1CE6B3B84FCD998057EC3 /* OnboardingView.swift in Sources */,
+				BLD1804B2F5FBD0E535E7EEC /* RecipeDetailView.swift in Sources */,
+				BLD18686183CB53DA8D078E0 /* RecipeExtractorService.swift in Sources */,
+				BLD161135FE77CF54B2B9287 /* RecipeExtractorView.swift in Sources */,
+				BLD1EF58E7B14F72E4A05F7C /* RecipeImportView.swift in Sources */,
+				BLD1CBFAEF6E29016FC49604 /* RecipeSearchView.swift in Sources */,
+				BLD18BDAE4D4A178325A4B45 /* RecipeVersionManager.swift in Sources */,
+				BLD102D599C7C98EA3A5255D /* Recipes.swift in Sources */,
+				BLD1547EE436736D64CAE21D /* ReleaseNotesView.swift in Sources */,
+				BLD1F5EF1361FDC65EA4F14D /* ReportRecipeView.swift in Sources */,
+				BLD14DEF15A199BAD0A3ED3E /* SupportView.swift in Sources */,
+				BLD1271CA54EFD5A9CEC5EB6 /* SyncOverlayView.swift in Sources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB2E2D55A73200587E5B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				BLD3A2D4BBEE22A1EA80964D /* CraftifyTests.swift in Sources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 		55BEFB382D55A73200587E5B /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
+				BLD4D81EDCC773BD48BC1233 /* CraftifyUITests.swift in Sources */,
+				BLD4E0E1FE7326B0921D7B54 /* CraftifyUITestsLaunchTests.swift in Sources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
 
@@ -275,62 +386,23 @@
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = KMS556J2F8;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -339,55 +411,16 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = KMS556J2F8;
 				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -400,36 +433,25 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Craftify/Craftify.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 124;
-				DEVELOPMENT_ASSET_PATHS = "";
-				ENABLE_PREVIEWS = YES;
+				CURRENT_PROJECT_VERSION = 125;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Craftify/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Craftify;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.reference";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arm64;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UIStatusBarHidden = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Debug;
 		};
@@ -441,36 +463,25 @@
 				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CODE_SIGN_ENTITLEMENTS = Craftify/Craftify.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 124;
-				DEVELOPMENT_ASSET_PATHS = "";
-				ENABLE_PREVIEWS = YES;
+				CURRENT_PROJECT_VERSION = 125;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Craftify/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Craftify;
-				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
-				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.reference";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchStoryboardName = LaunchScreen;
-				INFOPLIST_KEY_UIRequiredDeviceCapabilities = arm64;
-				INFOPLIST_KEY_UIRequiresFullScreen = YES;
-				INFOPLIST_KEY_UIStatusBarHidden = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.1;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.Craftify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				REGISTER_APP_GROUPS = NO;
-				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
-				SUPPORTS_MACCATALYST = NO;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator macosx";
+				SUPPORTS_MACCATALYST = YES;
 				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = YES;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2,6";
 			};
 			name = Release;
 		};
@@ -478,16 +489,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 107;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Craftify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Craftify";
 			};
 			name = Debug;
@@ -496,16 +502,11 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 107;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Craftify.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Craftify";
 			};
 			name = Release;
@@ -513,16 +514,11 @@
 		55BEFB4D2D55A73200587E5B /* Debug configuration for PBXNativeTarget "CraftifyUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 107;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = Craftify;
 			};
 			name = Debug;
@@ -530,16 +526,11 @@
 		55BEFB4E2D55A73200587E5B /* Release configuration for PBXNativeTarget "CraftifyUITests" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 107;
 				GENERATE_INFOPLIST_FILE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
-				MARKETING_VERSION = 1.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				PRODUCT_BUNDLE_IDENTIFIER = be.ghentphotography.www.CraftifyUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_VERSION = 6.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = Craftify;
 			};
 			name = Release;
@@ -550,36 +541,41 @@
 		55BEFB1D2D55A73000587E5B /* Build configuration list for PBXProject "Craftify" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				55BEFB442D55A73200587E5B /* Debug configuration for PBXProject "Craftify" */,
-				55BEFB452D55A73200587E5B /* Release configuration for PBXProject "Craftify" */,
+				55BEFB442D55A73200587E5B /* Debug */,
+				55BEFB452D55A73200587E5B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		55BEFB462D55A73200587E5B /* Build configuration list for PBXNativeTarget "Craftify" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				55BEFB472D55A73200587E5B /* Debug configuration for PBXNativeTarget "Craftify" */,
-				55BEFB482D55A73200587E5B /* Release configuration for PBXNativeTarget "Craftify" */,
+				55BEFB472D55A73200587E5B /* Debug */,
+				55BEFB482D55A73200587E5B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		55BEFB492D55A73200587E5B /* Build configuration list for PBXNativeTarget "CraftifyTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				55BEFB4A2D55A73200587E5B /* Debug configuration for PBXNativeTarget "CraftifyTests" */,
-				55BEFB4B2D55A73200587E5B /* Release configuration for PBXNativeTarget "CraftifyTests" */,
+				55BEFB4A2D55A73200587E5B /* Debug */,
+				55BEFB4B2D55A73200587E5B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 		55BEFB4C2D55A73200587E5B /* Build configuration list for PBXNativeTarget "CraftifyUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				55BEFB4D2D55A73200587E5B /* Debug configuration for PBXNativeTarget "CraftifyUITests" */,
-				55BEFB4E2D55A73200587E5B /* Release configuration for PBXNativeTarget "CraftifyUITests" */,
+				55BEFB4D2D55A73200587E5B /* Debug */,
+				55BEFB4E2D55A73200587E5B /* Release */,
 			);
+			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
 	};
 	rootObject = 55BEFB1A2D55A73000587E5B /* Project object */;
 }

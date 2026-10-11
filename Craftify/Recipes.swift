@@ -8,6 +8,72 @@
 import Foundation
 import CloudKit
 
+/// A complete package of recipes for a specific Minecraft version (.recipe file format)
+struct RecipePackage: Codable, Identifiable {
+    var id: String { gameVersion }
+    let formatVersion: Int
+    let gameVersion: String
+    let edition: String
+    let createdAt: String?
+    let generator: String?
+    let recipeCount: Int
+    let categories: [String]?
+    let recipes: [Recipe]
+
+    enum CodingKeys: String, CodingKey {
+        case formatVersion = "format_version"
+        case gameVersion = "game_version"
+        case edition
+        case createdAt = "created_at"
+        case generator
+        case recipeCount = "recipe_count"
+        case categories
+        case recipes
+    }
+}
+
+/// Metadata describing an installed recipe version
+struct RecipeVersionInfo: Identifiable, Codable, Equatable, Hashable {
+    var id: String { version }
+    var version: String
+    var displayName: String
+    var edition: String
+    var recipeCount: Int
+    var categories: [String]
+    var importedAt: Date
+    var isDefault: Bool
+    var fileName: String
+
+    var subtitle: String {
+        "\(edition) • \(recipeCount.formatted()) recipes"
+    }
+}
+
+/// User choice when importing a recipe file with a duplicate version number
+enum DuplicateResolution: String, CaseIterable, Identifiable {
+    case replace = "replace"
+    case keepBoth = "keep_both"
+    case cancel = "cancel"
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .replace: return "Replace"
+        case .keepBoth: return "Keep Both"
+        case .cancel: return "Cancel"
+        }
+    }
+
+    var localizedTitle: String {
+        switch self {
+        case .replace: return "替换现有版本"
+        case .keepBoth: return "同时保留两个版本"
+        case .cancel: return "取消导入"
+        }
+    }
+}
+
 struct Recipe: Codable, Identifiable, Equatable, Hashable {
     let id: Int
     let name: String

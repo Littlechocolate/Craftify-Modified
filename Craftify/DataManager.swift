@@ -94,16 +94,7 @@ final class DataManager: ObservableObject {
         self.defaults = defaults
         keyValueStore.synchronize()
 
-        networkMonitor.pathUpdateHandler = { [weak self] path in
-            Task { @MainActor in
-                self?.isConnected = path.status == .satisfied
-                if !(self?.isConnected ?? true) {
-                    self?.errorMessage = "No internet connection. Try again later."
-                    self?.accessibilityAnnouncement = self?.errorMessage
-                }
-            }
-        }
-        networkMonitor.start(queue: networkQueue)
+        setupNetworkMonitor()
 
         NotificationCenter.default.addObserver(
             self,
@@ -144,18 +135,49 @@ final class DataManager: ObservableObject {
             }
             .store(in: &cancellables)
 
-        if let localRecipes = loadRecipesFromLocalCache() {
-            print("Loaded \(localRecipes.count) recipes from local cache.")
-            self.recipes = localRecipes.sorted(by: { $0.name < $1.name })
-            self.syncRecentSearches()
-            seedKnownRecipeIDsIfNeeded(from: localRecipes)
-            imageStore.prefetch(recipes: localRecipes)
-        } else {
-            print("No local cache found; will fetch from CloudKit on first view load.")
-        }
+        reloadRecipesFromActiveVersion()
+
+        RecipeVersionManager.shared.$activeVersion
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.reloadRecipesFromActiveVersion()
+            }
+            .store(in: &cancellables)
 
         fetchConsoleCommands()
         syncChests()
+    }
+
+    func reloadRecipesFromActiveVersion() {
+        let loaded = RecipeVersionManager.shared.loadActiveRecipes()
+        if !loaded.isEmpty {
+            self.recipes = loaded.sorted { $0.name < $1.name }
+            self.lastUpdated = Date()
+            self.syncRecentSearches()
+            self.seedKnownRecipeIDsIfNeeded(from: self.recipes)
+            self.imageStore.prefetch(recipes: self.recipes)
+        } else if let cached = loadRecipesFromLocalCache(), !cached.isEmpty {
+            self.recipes = cached.sorted { $0.name < $1.name }
+            self.lastUpdated = Date()
+            self.syncRecentSearches()
+            self.seedKnownRecipeIDsIfNeeded(from: self.recipes)
+            self.imageStore.prefetch(recipes: self.recipes)
+        }
+    }
+
+    private func setupNetworkMonitor() {
+        networkMonitor.pathUpdateHandler = { path in
+            let satisfied = path.status == .satisfied
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.isConnected = satisfied
+                if !satisfied {
+                    self.errorMessage = "No internet connection. Try again later."
+                    self.accessibilityAnnouncement = self.errorMessage
+                }
+            }
+        }
+        networkMonitor.start(queue: networkQueue)
     }
 
     deinit {
@@ -173,21 +195,13 @@ final class DataManager: ObservableObject {
     }
 
     var syncStatus: String {
-        if !isConnected {
-            return "No internet connection"
-        } else if let lastUpdated = lastUpdated {
-            let formatter = DateFormatter()
-            formatter.dateStyle = .short
-            formatter.timeStyle = .short
-            formatter.locale = Locale.current
-            formatter.timeZone = TimeZone.current
-            return "Last synced: \(formatter.string(from: lastUpdated))"
-        } else if isLoading {
-            return "Syncing recipes..."
-        } else if let errorMessage = errorMessage {
-            return "Sync failed: \(errorMessage)"
+        let active = RecipeVersionManager.shared.activeVersion
+        if let info = RecipeVersionManager.shared.installedVersions.first(where: { $0.version == active }) {
+            return "Active Version: Minecraft \(info.version) (\(info.recipeCount.formatted()) recipes)"
+        } else if !recipes.isEmpty {
+            return "\(recipes.count.formatted()) recipes available offline"
         } else {
-            return "Not synced"
+            return "No recipe version active"
         }
     }
 
@@ -314,27 +328,15 @@ final class DataManager: ObservableObject {
         completion: @escaping () -> Void = {}
     ) {
         shouldPersistRecipeBookLoadingError = false
+        isLoading = true
+        if isManual { isManualSyncing = true }
 
-        if !isConnected {
-            shouldPersistRecipeBookLoadingError = waitForImages
-            errorMessage = "No internet connection. Try again later."
-            accessibilityAnnouncement = errorMessage
-            completion()
-            return
-        }
-
-        if let lastFetch = lastRecipeFetch,
-           Date().timeIntervalSince(lastFetch) < recipeFetchInterval {
-            print("Skipping recipe fetch; last fetch was less than \(recipeFetchInterval) seconds ago.")
-            completion()
-            return
-        }
-
-        loadData(
-            isManual: isManual,
-            waitForImages: waitForImages,
-            completion: completion
-        )
+        reloadRecipesFromActiveVersion()
+        lastUpdated = Date()
+        lastRecipeFetch = Date()
+        isLoading = false
+        isManualSyncing = false
+        completion()
     }
 
     func loadData(
@@ -342,142 +344,11 @@ final class DataManager: ObservableObject {
         waitForImages: Bool = false,
         completion: @escaping () -> Void
     ) {
-        let generation = recipeFetchGeneration
-        Task {
-            await loadData(
-                isManual: isManual,
-                waitForImages: waitForImages,
-                generation: generation
-            )
-            completion()
-        }
+        fetchRecipes(isManual: isManual, waitForImages: waitForImages, completion: completion)
     }
 
     func loadDataAsync(isManual: Bool = false, waitForImages: Bool = false) async {
-        await withCheckedContinuation { continuation in
-            loadData(isManual: isManual, waitForImages: waitForImages) {
-                continuation.resume()
-            }
-        }
-    }
-
-    private func loadData(
-        isManual: Bool,
-        waitForImages: Bool,
-        generation: Int
-    ) async {
-        guard generation == recipeFetchGeneration else { return }
-
-        isLoading = true
-        if isManual { isManualSyncing = true }
-        shouldPersistRecipeBookLoadingError = false
-        errorMessage = nil
-
-        let database = CKContainer(identifier: "iCloud.craftifydb").publicCloudDatabase
-        let query = CKQuery(recordType: "Recipe", predicate: NSPredicate(value: true))
-
-        recipeBookLoadingPhase = .downloadingRecipes(downloaded: 0, total: nil)
-        let catalogRecipeCount = await fetchCatalogRecipeCount(from: database)
-        guard generation == recipeFetchGeneration else { return }
-        recipeBookLoadingPhase = .downloadingRecipes(
-            downloaded: 0,
-            total: catalogRecipeCount
-        )
-
-        for retryCount in 0...3 {
-            guard generation == recipeFetchGeneration else { return }
-
-            do {
-                let records = try await fetchAllRecords(
-                    matching: query,
-                    from: database
-                ) { [weak self] downloaded in
-                    guard let self, generation == self.recipeFetchGeneration else {
-                        return
-                    }
-                    self.recipeBookLoadingPhase = .downloadingRecipes(
-                        downloaded: downloaded,
-                        total: catalogRecipeCount.map { max($0, downloaded) }
-                    )
-                }
-                guard generation == recipeFetchGeneration else { return }
-
-                let fetchedRecipes = records.compactMap(convertRecordToRecipe)
-                let actualRecipeCount = fetchedRecipes.count
-                recipeBookLoadingPhase = .downloadingRecipes(
-                    downloaded: actualRecipeCount,
-                    total: max(catalogRecipeCount ?? 0, actualRecipeCount)
-                )
-                recipes = fetchedRecipes.sorted { $0.name < $1.name }
-                syncRecentSearches()
-                saveRecipesToLocalCache(fetchedRecipes)
-
-                if isManual {
-                    await imageStore.refresh(recipes: fetchedRecipes)
-                    guard generation == recipeFetchGeneration else { return }
-                } else if waitForImages {
-                    let imageCount = CraftImageStore.imageKeys(in: fetchedRecipes).count
-                    recipeBookLoadingPhase = .preparingImages(
-                        prepared: 0,
-                        total: imageCount,
-                        recipeTotal: actualRecipeCount
-                    )
-                    let allImagesPrepared = await imageStore.prepare(
-                        recipes: fetchedRecipes
-                    ) { [weak self] prepared, total in
-                        guard let self, generation == self.recipeFetchGeneration else {
-                            return
-                        }
-                        self.recipeBookLoadingPhase = .preparingImages(
-                            prepared: prepared,
-                            total: total,
-                            recipeTotal: actualRecipeCount
-                        )
-                    }
-                    guard generation == recipeFetchGeneration else { return }
-                    guard allImagesPrepared else {
-                        shouldPersistRecipeBookLoadingError = true
-                        errorMessage = "Some recipe images couldn’t be downloaded. Please try again."
-                        accessibilityAnnouncement = errorMessage
-                        isLoading = false
-                        isManualSyncing = false
-                        return
-                    }
-
-                    recipeBookLoadingPhase = .preparingImages(
-                        prepared: imageCount,
-                        total: imageCount,
-                        recipeTotal: actualRecipeCount
-                    )
-                    try? await Task.sleep(for: .milliseconds(300))
-                    guard generation == recipeFetchGeneration else { return }
-                } else {
-                    imageStore.prefetch(recipes: fetchedRecipes)
-                }
-                recordSuccessfulRecipeLibrary(fetchedRecipes)
-                lastUpdated = Date()
-                lastRecipeFetch = Date()
-                shouldPersistRecipeBookLoadingError = false
-                isLoading = false
-                isManualSyncing = false
-                return
-            } catch {
-                guard generation == recipeFetchGeneration else { return }
-
-                if let ckError = error as? CKError, ckError.isRetryable, retryCount < 3 {
-                    try? await Task.sleep(for: .seconds(3))
-                    guard generation == recipeFetchGeneration else { return }
-                    continue
-                }
-                let type = errorType(for: error)
-                shouldPersistRecipeBookLoadingError = waitForImages
-                errorMessage = type.rawValue
-                accessibilityAnnouncement = type.rawValue
-                isLoading = false
-                isManualSyncing = false
-                return
-            }
-        }
+        fetchRecipes(isManual: isManual, waitForImages: waitForImages)
     }
 
     func dismissNewRecipeAnnouncement() {
@@ -1009,8 +880,39 @@ final class DataManager: ObservableObject {
     }
 
     var categories: [String] {
-        let uniqueCategories = Set(recipes.map { $0.category })
-        return Array(uniqueCategories).sorted()
+        let unique = Set(recipes.map { $0.category }).filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        let canonicalOrder = [
+            "Building Blocks",
+            "Equipment",
+            "Redstone",
+            "Food & Cooking",
+            "Miscellaneous"
+        ]
+        return unique.sorted { a, b in
+            let idxA = canonicalOrder.firstIndex(of: a) ?? Int.max
+            let idxB = canonicalOrder.firstIndex(of: b) ?? Int.max
+            if idxA != idxB {
+                return idxA < idxB
+            }
+            return a.localizedStandardCompare(b) == .orderedAscending
+        }
+    }
+
+    static func categorySymbol(for category: String) -> String {
+        switch category.lowercased() {
+        case "building blocks", "building", "blocks":
+            return "cube.fill"
+        case "equipment", "tools", "weapons", "armor":
+            return "shield.fill"
+        case "redstone", "mechanisms":
+            return "bolt.fill"
+        case "food & cooking", "food", "cooking":
+            return "flame.fill"
+        case "miscellaneous", "misc":
+            return "shippingbox.fill"
+        default:
+            return "tag.fill"
+        }
     }
 
     var filteredRecipes: [Recipe] {
