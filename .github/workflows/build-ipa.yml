@@ -110,8 +110,7 @@ jobs:
 
           # Clean previous signature and sign with exact bundle identifier
           rm -rf Payload/Craftify.app/_CodeSignature
-          codesign --force --sign - --identifier "be.ghentphotography.www.Craftify" Payload/Craftify.app/Craftify
-          codesign --force --sign - --identifier "be.ghentphotography.www.Craftify" Payload/Craftify.app
+          codesign --force --deep --sign - --identifier "be.ghentphotography.www.Craftify" Payload/Craftify.app
           codesign -dvvv Payload/Craftify.app || true
 
           # Verify package layout before archiving
