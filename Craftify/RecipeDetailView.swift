@@ -303,14 +303,6 @@ private struct CraftingRecipeCard: View {
         return variants[safeIndex]
     }
 
-    private var pageViewHeight: CGFloat {
-        let gridHeight = cellSize * 3 + 12
-        if dynamicTypeSize.isAccessibilitySize {
-            return gridHeight + cellSize + 96
-        }
-        return gridHeight + 16
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 12) {
@@ -332,14 +324,25 @@ private struct CraftingRecipeCard: View {
             }
 
             if variants.count > 1 {
-                TabView(selection: $selectedCraftingOption) {
-                    ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
-                        variantLayoutView(for: variant)
-                            .tag(idx)
+                variantLayoutView(for: activeVariant)
+                    .padding(.vertical, 6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .hidden()
+                    .accessibilityHidden(true)
+                    .overlay {
+                        TabView(selection: $selectedCraftingOption) {
+                            ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
+                                variantLayoutView(for: variant)
+                                    .padding(.vertical, 6)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                                    .tag(idx)
+                            }
+                        }
+                        .tabViewStyle(.page(indexDisplayMode: .never))
                     }
-                }
-                .tabViewStyle(.page(indexDisplayMode: .never))
-                .frame(height: pageViewHeight)
+                    .clipped()
+                    .animation(.snappy(duration: 0.25), value: safeIndex)
 
                 HStack(spacing: 8) {
                     Spacer()
