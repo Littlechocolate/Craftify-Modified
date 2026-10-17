@@ -96,3 +96,6 @@ fastlane/test_output
 *.log
 **/xcuserdata/
 *.xcuserstate
+__pycache__/
+*.pyc
+craftify-asset-studio/output/

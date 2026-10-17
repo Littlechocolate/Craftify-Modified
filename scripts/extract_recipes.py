@@ -1,21 +1,32 @@
 #!/usr/bin/env python3
 """
-Craftify Minecraft Recipe Extractor
+Craftify Minecraft Recipe Extractor & Icon Packager
 Directly extracts recipes from Minecraft server / client jars,
 processes them, classifies them according to Minecraft's built-in in-game categories,
-and packages them into Craftify .recipe files.
+renders 3D/2D inventory icons via Craftify Asset Studio's IsometricRenderer (run.py),
+and packages both recipes and version-isolated icons into Craftify .recipe files.
 """
 
-import sys
+import argparse
+import base64
+import io
+import json
 import os
 import re
-import json
 import shutil
-import zipfile
-import argparse
-import tempfile
 import subprocess
+import sys
+import tempfile
+import zipfile
 from datetime import datetime, timezone
+from typing import Callable, Dict, List, Optional
+
+# Ensure craftify-asset-studio is on sys.path so IsometricRenderer can be imported
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+ASSET_STUDIO_DIR = os.path.join(PROJECT_ROOT, "craftify-asset-studio")
+if os.path.isdir(ASSET_STUDIO_DIR) and ASSET_STUDIO_DIR not in sys.path:
+    sys.path.insert(0, ASSET_STUDIO_DIR)
 
 # Minecraft built-in category mapping
 MINECRAFT_BUILTIN_CATEGORIES = {
@@ -24,16 +35,95 @@ MINECRAFT_BUILTIN_CATEGORIES = {
     "equipment": "Equipment",
     "redstone": "Redstone",
     "misc": "Miscellaneous",
-    "food": "Food & Cooking"
+    "food": "Food & Cooking",
 }
+
+# Representative item fallbacks for Minecraft recipe ingredient tags (#minecraft:*)
+TAG_ICON_FALLBACKS = {
+    "acacia_logs": "acacia_log",
+    "anvil": "anvil",
+    "arrows": "arrow",
+    "bamboo_blocks": "bamboo_block",
+    "banners": "white_banner",
+    "beds": "red_bed",
+    "birch_logs": "birch_log",
+    "boats": "oak_boat",
+    "buttons": "oak_button",
+    "candles": "candle",
+    "carpets": "white_carpet",
+    "cherry_logs": "cherry_log",
+    "chest_boats": "oak_chest_boat",
+    "coals": "coal",
+    "compasses": "compass",
+    "copper_tool_materials": "copper_ingot",
+    "creeper_drop_music_discs": "music_disc_cat",
+    "crimson_stems": "crimson_stem",
+    "dark_oak_logs": "dark_oak_log",
+    "decorated_pot_ingredients": "brick",
+    "decorated_pot_sherds": "angler_pottery_sherd",
+    "diamond_tool_materials": "diamond",
+    "doors": "oak_door",
+    "eggs": "egg",
+    "fence_gates": "oak_fence_gate",
+    "fences": "oak_fence",
+    "fishes": "cod",
+    "flowers": "dandelion",
+    "furnace_materials": "cobblestone",
+    "gold_tool_materials": "gold_ingot",
+    "hanging_signs": "oak_hanging_sign",
+    "iron_tool_materials": "iron_ingot",
+    "jungle_logs": "jungle_log",
+    "leaves": "oak_leaves",
+    "lectern_books": "writable_book",
+    "logs": "oak_log",
+    "logs_that_burn": "oak_log",
+    "mangrove_logs": "mangrove_log",
+    "metal_nuggets": "iron_nugget",
+    "netherite_tool_materials": "netherite_ingot",
+    "oak_logs": "oak_log",
+    "pale_oak_logs": "pale_oak_log",
+    "planks": "oak_planks",
+    "rails": "rail",
+    "sand": "sand",
+    "saplings": "oak_sapling",
+    "shulker_boxes": "shulker_box",
+    "signs": "oak_sign",
+    "slabs": "oak_slab",
+    "small_flowers": "poppy",
+    "smelts_to_glass": "sand",
+    "soul_fire_base_blocks": "soul_sand",
+    "spruce_logs": "spruce_log",
+    "stairs": "oak_stairs",
+    "stone_bricks": "stone_bricks",
+    "stone_buttons": "stone_button",
+    "stone_crafting_materials": "cobblestone",
+    "stone_tool_materials": "cobblestone",
+    "terracotta": "terracotta",
+    "trapdoors": "oak_trapdoor",
+    "trim_materials": "amethyst_shard",
+    "trim_templates": "ward_armor_trim_smithing_template",
+    "trimmable_armor": "iron_chestplate",
+    "walls": "cobblestone_wall",
+    "warped_stems": "warped_stem",
+    "wooden_buttons": "oak_button",
+    "wooden_doors": "oak_door",
+    "wooden_fences": "oak_fence",
+    "wooden_pressure_plates": "oak_pressure_plate",
+    "wooden_slabs": "oak_slab",
+    "wooden_stairs": "oak_stairs",
+    "wooden_tool_materials": "oak_planks",
+    "wooden_trapdoors": "oak_trapdoor",
+    "wool": "white_wool",
+    "wool_carpets": "white_carpet",
+}
+
 
 def format_item_name(item_id: str) -> str:
     """Converts a minecraft identifier (e.g. 'minecraft:iron_pickaxe') to a human-readable title."""
     if not item_id:
         return ""
-    raw = item_id.split(":")[-1]
+    raw = item_id.lstrip("#").split(":")[-1]
     words = raw.replace("_", " ").split()
-    # Capitalize words
     capitalized = []
     for word in words:
         if word in ["of", "and", "the", "in", "with"] and len(capitalized) > 0:
@@ -41,6 +131,7 @@ def format_item_name(item_id: str) -> str:
         else:
             capitalized.append(word.capitalize())
     return " ".join(capitalized)
+
 
 def resolve_ingredient_name(ing) -> str:
     """Extracts a readable item name from a recipe ingredient definition."""
@@ -56,17 +147,17 @@ def resolve_ingredient_name(ing) -> str:
         if "item" in ing:
             return format_item_name(ing["item"])
         if "tag" in ing:
-            # e.g. "minecraft:planks" -> "Planks"
             return format_item_name(ing["tag"])
         if "id" in ing:
             return format_item_name(ing["id"])
     return ""
 
-def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> dict:
+
+def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> Optional[dict]:
     """Processes a raw Minecraft recipe JSON into Craftify Recipe structure."""
     recipe_type = raw_data.get("type", "")
     category_key = raw_data.get("category", "").lower()
-    
+
     # Minecraft Built-in Category fallback
     category = MINECRAFT_BUILTIN_CATEGORIES.get(category_key, "")
 
@@ -95,14 +186,14 @@ def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> dict:
             category = "Miscellaneous"
         pattern = raw_data.get("pattern", [])
         key_map = raw_data.get("key", {})
-        
+
         # 3x3 grid layout
         grid = [["" for _ in range(3)] for _ in range(3)]
         for r, row_str in enumerate(pattern[:3]):
             for c, char in enumerate(row_str[:3]):
                 if char != " " and char in key_map:
                     grid[r][c] = resolve_ingredient_name(key_map[char])
-        
+
         ingredients = []
         for r in range(3):
             for c in range(3):
@@ -195,8 +286,9 @@ def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> dict:
         "alternateOutput3": None,
         "category": category,
         "imageremark": imageremark,
-        "remarks": remarks if remarks else None
+        "remarks": remarks if remarks else None,
     }
+
 
 def find_java_executable() -> str:
     """Finds a valid Java runtime on macOS / Linux."""
@@ -207,7 +299,7 @@ def find_java_executable() -> str:
                 candidate = os.path.join(jvm_root, entry, "Contents/Home/bin/java")
                 if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
                     return candidate
-    
+
     java_home = os.environ.get("JAVA_HOME")
     if java_home:
         candidate = os.path.join(java_home, "bin/java")
@@ -220,14 +312,198 @@ def find_java_executable() -> str:
 
     return "java"
 
+
+def jar_has_client_assets(jar_path: str) -> bool:
+    """Checks whether a .jar file contains client textures and models for icon rendering."""
+    if not jar_path or not os.path.isfile(jar_path):
+        return False
+    try:
+        with zipfile.ZipFile(jar_path, "r") as z:
+            return any(n.startswith("assets/minecraft/textures/") for n in z.namelist())
+    except Exception:
+        return False
+
+
+def resolve_asset_jar(jar_path: str, version: str, client_jar_path: Optional[str] = None) -> Optional[str]:
+    """Resolves the best Minecraft client .jar containing textures/models for rendering icons."""
+    if client_jar_path and jar_has_client_assets(client_jar_path):
+        return client_jar_path
+    if jar_has_client_assets(jar_path):
+        return jar_path
+
+    # Search local Minecraft installations for a client jar matching `version`
+    try:
+        from craftify_asset_studio.extractor.jar_scanner import JarScanner
+
+        local_jars = JarScanner.find_local_minecraft_jars()
+        for entry in local_jars:
+            if version and (version in entry["version"] or entry["version"] in version):
+                if jar_has_client_assets(entry["path"]):
+                    return entry["path"]
+        for entry in local_jars:
+            if jar_has_client_assets(entry["path"]):
+                return entry["path"]
+    except Exception:
+        pass
+    return None
+
+
+def collect_recipe_item_keys(recipes: List[dict]) -> set:
+    """Collects all unique item display names referenced across all recipes and stations."""
+    keys = {
+        "Crafting Table",
+        "Furnace",
+        "Blast Furnace",
+        "Smoker",
+        "Stonecutter",
+        "Smithing Table",
+        "Campfire",
+    }
+    for r in recipes:
+        for field in ("name", "image", "imageremark"):
+            val = r.get(field)
+            if val and isinstance(val, str) and val.strip():
+                keys.add(val.strip())
+        for ing_field in (
+            "ingredients",
+            "alternateIngredients",
+            "alternateIngredients1",
+            "alternateIngredients2",
+            "alternateIngredients3",
+        ):
+            ing_list = r.get(ing_field)
+            if isinstance(ing_list, list):
+                for ing in ing_list:
+                    if ing and isinstance(ing, str) and ing.strip():
+                        keys.add(ing.strip())
+    return keys
+
+
+def _resolve_tag_from_jar(zf: zipfile.ZipFile, namelist: set, tag_name: str, visited: Optional[set] = None) -> Optional[str]:
+    """Resolves a Minecraft item tag to its first concrete item ID inside the jar."""
+    if visited is None:
+        visited = set()
+    if tag_name in visited:
+        return None
+    visited.add(tag_name)
+
+    for prefix in ("data/minecraft/tags/item/", "data/minecraft/tags/items/"):
+        path = f"{prefix}{tag_name}.json"
+        if path in namelist:
+            try:
+                data = json.loads(zf.read(path).decode("utf-8"))
+                for val in data.get("values", []):
+                    val_str = val.get("id", "") if isinstance(val, dict) else str(val)
+                    if not val_str:
+                        continue
+                    if val_str.startswith("#"):
+                        sub_tag = val_str.lstrip("#").split(":")[-1]
+                        resolved = _resolve_tag_from_jar(zf, namelist, sub_tag, visited)
+                        if resolved:
+                            return resolved
+                    else:
+                        return val_str.split(":")[-1]
+            except Exception:
+                pass
+    return None
+
+
+def render_icons_for_package(
+    asset_jar_path: str,
+    recipes: List[dict],
+    icon_size: int = 64,
+    include_all_items: bool = True,
+    renderer_instance=None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+) -> Dict[str, str]:
+    """
+    Renders inventory-style icons (via craftify-asset-studio's IsometricRenderer)
+    for all items in the version & recipes, returning {display_name: base64_png}.
+    """
+    from craftify_asset_studio.renderer.isometric_renderer import IsometricRenderer
+
+    owns_renderer = False
+    renderer = renderer_instance
+    if renderer is None:
+        renderer = IsometricRenderer(asset_jar_path, icon_size=icon_size, ssaa=2)
+        owns_renderer = True
+
+    try:
+        keys_to_render = collect_recipe_item_keys(recipes)
+
+        # Build reverse lookup from English display name -> raw item_id
+        en_to_raw: Dict[str, str] = {}
+        for k, v in renderer.lang_en.items():
+            if (k.startswith("block.minecraft.") or k.startswith("item.minecraft.")) and isinstance(v, str):
+                parts = k.split(".")
+                if len(parts) == 3:
+                    raw_id = parts[2]
+                    en_to_raw[v.lower()] = raw_id
+
+        if include_all_items:
+            for item_id in renderer.all_items:
+                keys_to_render.add(format_item_name(item_id))
+                en_label = renderer.lang_en.get(
+                    f"block.minecraft.{item_id}",
+                    renderer.lang_en.get(f"item.minecraft.{item_id}"),
+                )
+                if en_label:
+                    keys_to_render.add(en_label)
+
+        all_items_set = set(renderer.all_items)
+        sorted_keys = sorted(keys_to_render)
+        total = len(sorted_keys)
+
+        raw_b64_cache: Dict[str, Optional[str]] = {}
+        icons: Dict[str, str] = {}
+
+        for idx, display_key in enumerate(sorted_keys):
+            raw_candidate = display_key.lstrip("#").strip().lower().replace(" ", "_")
+            if raw_candidate.endswith("_(trimmed)"):
+                raw_candidate = raw_candidate.replace("_(trimmed)", "")
+
+            if raw_candidate in TAG_ICON_FALLBACKS:
+                raw_id = TAG_ICON_FALLBACKS[raw_candidate]
+            elif raw_candidate in all_items_set:
+                raw_id = raw_candidate
+            elif display_key.lower() in en_to_raw:
+                raw_id = en_to_raw[display_key.lower()]
+            else:
+                tag_resolved = _resolve_tag_from_jar(renderer.zf, renderer.namelist, raw_candidate)
+                raw_id = tag_resolved if tag_resolved else raw_candidate
+
+            if raw_id not in raw_b64_cache:
+                try:
+                    img = renderer.render_item(raw_id, target_size=icon_size)
+                    if img is not None and img.getbbox() is not None:
+                        buf = io.BytesIO()
+                        img.save(buf, format="PNG", optimize=True)
+                        raw_b64_cache[raw_id] = base64.b64encode(buf.getvalue()).decode("ascii")
+                    else:
+                        raw_b64_cache[raw_id] = None
+                except Exception:
+                    raw_b64_cache[raw_id] = None
+
+            b64_val = raw_b64_cache.get(raw_id)
+            if b64_val:
+                icons[display_key] = b64_val
+
+            if progress_callback and (idx % 25 == 0 or idx == total - 1):
+                progress_callback(idx + 1, total, display_key)
+
+        return icons
+    finally:
+        if owns_renderer and renderer is not None:
+            renderer.close()
+
+
 def extract_recipes_from_jar(jar_path: str, run_generator: bool = False, version: str = None) -> list:
     """Extracts raw recipe JSONs from a Minecraft jar file."""
     if not os.path.isfile(jar_path):
         raise FileNotFoundError(f"Jar file not found: {jar_path}")
 
-    # Detect version if not provided
     if not version:
-        m = re.search(r"(\d+\.\d+(\.\d+)?)", os.path.basename(jar_path))
+        m = re.search(r"(\d+\.\d+(\.\d+)?|\d{2}w\d{2}[a-z])", os.path.basename(jar_path))
         version = m.group(1) if m else "1.21.1"
 
     recipe_jsons = []
@@ -239,16 +515,23 @@ def extract_recipes_from_jar(jar_path: str, run_generator: bool = False, version
             cmd = [
                 java_bin,
                 "-DbundlerRepoDir=.",
-                "-cp", os.path.abspath(jar_path),
+                "-cp",
+                os.path.abspath(jar_path),
                 "net.minecraft.data.Main",
                 "--reports",
-                "--all"
+                "--all",
             ]
             print(f"[Craftify] Command: {' '.join(cmd)}")
             try:
-                proc = subprocess.run(cmd, cwd=tmp_dir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=120)
+                proc = subprocess.run(
+                    cmd,
+                    cwd=tmp_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    timeout=120,
+                )
                 print(f"[Craftify] Generator completed with return code: {proc.returncode}")
-                # Look for generated recipes
                 gen_recipe_dir = os.path.join(tmp_dir, "generated", "data", "minecraft", "recipe")
                 if not os.path.isdir(gen_recipe_dir):
                     gen_recipe_dir = os.path.join(tmp_dir, "generated", "data", "minecraft", "recipes")
@@ -264,7 +547,6 @@ def extract_recipes_from_jar(jar_path: str, run_generator: bool = False, version
     if not recipe_jsons:
         print(f"[Craftify] Extracting recipes directly from jar: {jar_path}...")
         with zipfile.ZipFile(jar_path, "r") as z:
-            # Check for nested server jar in bundler
             nested_jars = [n for n in z.namelist() if n.startswith("META-INF/versions/") and n.endswith(".jar")]
             if nested_jars:
                 print(f"[Craftify] Found bundler inner jar: {nested_jars[0]}")
@@ -279,12 +561,11 @@ def extract_recipes_from_jar(jar_path: str, run_generator: bool = False, version
 
     return recipe_jsons
 
+
 def read_recipes_from_zip(z: zipfile.ZipFile) -> list:
     recipes = []
     for name in z.namelist():
-        # Match data/minecraft/recipe/*.json or data/minecraft/recipes/*.json
         if (name.startswith("data/minecraft/recipe/") or name.startswith("data/minecraft/recipes/")) and name.endswith(".json"):
-            # Exclude bundle datapack overrides if redundant
             try:
                 content = json.loads(z.read(name).decode("utf-8"))
                 recipes.append(content)
@@ -292,11 +573,23 @@ def read_recipes_from_zip(z: zipfile.ZipFile) -> list:
                 continue
     return recipes
 
-def create_recipe_package(jar_path: str, output_path: str, version: str = None, run_generator: bool = False):
-    """Main function to create a .recipe package file."""
+
+def create_recipe_package(
+    jar_path: str,
+    output_path: str,
+    version: str = None,
+    run_generator: bool = False,
+    client_jar_path: Optional[str] = None,
+    icon_size: int = 64,
+    include_icons: bool = True,
+    include_all_items: bool = True,
+    renderer_instance=None,
+    progress_callback: Optional[Callable[[int, int, str], None]] = None,
+):
+    """Main function to create a .recipe package file with bundled inventory icons."""
     if not version:
-        m = re.search(r"(\d+\.\d+(\.\d+)?)", os.path.basename(jar_path))
-        version = m.group(1) if m else "1.21.1"
+        m = re.search(r"(\d+\.\d+(\.\d+)?|\d{2}w\d{2}[a-z])", os.path.basename(jar_path))
+        version = m.group(1) if m else os.path.splitext(os.path.basename(jar_path))[0]
 
     print(f"[Craftify] Processing recipes for Minecraft {version} from {jar_path}...")
     raw_recipes = extract_recipes_from_jar(jar_path, run_generator=run_generator, version=version)
@@ -310,7 +603,6 @@ def create_recipe_package(jar_path: str, output_path: str, version: str = None, 
         recipe = process_recipe_json(raw, next_id, version)
         if not recipe:
             continue
-        # Avoid exact duplicates
         key = (recipe["name"], tuple(recipe["ingredients"]), recipe["output"], recipe["imageremark"])
         if key in seen_keys:
             continue
@@ -318,36 +610,72 @@ def create_recipe_package(jar_path: str, output_path: str, version: str = None, 
         processed_recipes.append(recipe)
         next_id += 1
 
-    # Sort alphabetically by name
     processed_recipes.sort(key=lambda r: r["name"])
-
-    # Collect distinct categories present
     categories = sorted(list(set(r["category"] for r in processed_recipes if r["category"])))
 
+    icons: Dict[str, str] = {}
+    if include_icons:
+        asset_jar = jar_path if renderer_instance is not None else resolve_asset_jar(jar_path, version, client_jar_path)
+        if asset_jar or renderer_instance is not None:
+            print(f"[Craftify] Rendering inventory icons for Minecraft {version} via IsometricRenderer ({asset_jar})...")
+            try:
+                icons = render_icons_for_package(
+                    asset_jar_path=asset_jar,
+                    recipes=processed_recipes,
+                    icon_size=icon_size,
+                    include_all_items=include_all_items,
+                    renderer_instance=renderer_instance,
+                    progress_callback=progress_callback,
+                )
+                print(f"[Craftify] Rendered and bundled {len(icons)} inventory icons into .recipe package.")
+            except Exception as e:
+                print(f"[Craftify] Warning: Icon rendering failed ({e}). Packaging recipes without embedded icons.")
+        else:
+            print("[Craftify] Note: No client assets found in jar; packaging recipes without embedded icons.")
+
     package = {
-        "format_version": 1,
+        "format_version": 2,
         "game_version": version,
         "edition": "Java",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        "generator": "Craftify Extractor v1.0",
+        "generator": "Craftify Extractor v2.0 (IsometricRenderer)",
         "recipe_count": len(processed_recipes),
+        "icon_count": len(icons),
         "categories": categories,
-        "recipes": processed_recipes
+        "recipes": processed_recipes,
+        "icons": icons if icons else None,
     }
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(package, f, indent=2, ensure_ascii=False)
 
-    print(f"[Craftify] Successfully created {output_path} with {len(processed_recipes)} recipes across {len(categories)} categories!")
+    print(
+        f"[Craftify] Successfully created {output_path} with {len(processed_recipes)} recipes "
+        f"and {len(icons)} version-isolated icons across {len(categories)} categories!"
+    )
     return package
 
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Craftify Minecraft Recipe Extractor")
+    parser = argparse.ArgumentParser(description="Craftify Minecraft Recipe Extractor & Icon Packager")
     parser.add_argument("--jar", required=True, help="Path to server.jar or client jar")
+    parser.add_argument("--client-jar", help="Optional path to client .jar if --jar is a server-only jar")
     parser.add_argument("--output", default="1.21.1.recipe", help="Output .recipe file path")
-    parser.add_argument("--version", help="Minecraft version (e.g. 1.21.4)")
+    parser.add_argument("--version", help="Minecraft version (e.g. 1.21.1, 26w14a, 26.3)")
+    parser.add_argument("--icon-size", type=int, default=64, help="Rendered inventory icon size in pixels (default: 64)")
+    parser.add_argument("--no-icons", action="store_true", help="Skip rendering and embedding inventory icons")
+    parser.add_argument("--recipe-icons-only", action="store_true", help="Only render icons referenced by recipes")
     parser.add_argument("--run-generator", action="store_true", help="Run net.minecraft.data.Main generator")
     args = parser.parse_args()
 
-    create_recipe_package(args.jar, args.output, args.version, args.run_generator)
+    create_recipe_package(
+        jar_path=args.jar,
+        output_path=args.output,
+        version=args.version,
+        run_generator=args.run_generator,
+        client_jar_path=args.client_jar,
+        icon_size=args.icon_size,
+        include_icons=not args.no_icons,
+        include_all_items=not args.recipe_icons_only,
+    )

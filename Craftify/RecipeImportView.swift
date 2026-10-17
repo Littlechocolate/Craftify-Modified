@@ -139,7 +139,9 @@ struct RecipeImportView: View {
                             .font(.title2.bold())
                             .foregroundStyle(accent)
                         Spacer()
-                        Text("\(activeInfo.recipeCount.formatted()) recipes")
+                        Text(activeInfo.iconCount > 0
+                             ? "\(activeInfo.recipeCount.formatted()) recipes • \(activeInfo.iconCount.formatted()) icons"
+                             : "\(activeInfo.recipeCount.formatted()) recipes")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.secondary)
                     }

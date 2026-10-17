@@ -54,6 +54,28 @@ final class RecipeExtractorService: ObservableObject {
         return nil
     }
 
+    func findPythonExecutable() -> String {
+        let fileManager = FileManager.default
+        let frameworkRoot = "/Library/Frameworks/Python.framework/Versions"
+        if let versions = try? fileManager.contentsOfDirectory(atPath: frameworkRoot) {
+            for ver in versions.sorted().reversed() where ver != "Current" {
+                let candidate = "\(frameworkRoot)/\(ver)/bin/python3"
+                if fileManager.isExecutableFile(atPath: candidate) {
+                    return candidate
+                }
+            }
+        }
+        let candidates = [
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3"
+        ]
+        for candidate in candidates where fileManager.isExecutableFile(atPath: candidate) {
+            return candidate
+        }
+        return "/usr/bin/python3"
+    }
+
     // MARK: - Extraction Routine
 
     func extractRecipes(
@@ -95,7 +117,7 @@ final class RecipeExtractorService: ObservableObject {
         var success = false
 
         if let scriptPath = projectScript, fileManager.fileExists(atPath: scriptPath) {
-            log("Running extraction engine via \(URL(fileURLWithPath: scriptPath).lastPathComponent)…")
+            log("Running extraction & IsometricRenderer icon packaging via \(URL(fileURLWithPath: scriptPath).lastPathComponent)…")
             success = await runScriptExtraction(
                 scriptPath: scriptPath,
                 jarURL: jarURL,
@@ -116,9 +138,10 @@ final class RecipeExtractorService: ObservableObject {
         if success && fileManager.fileExists(atPath: outputURL.path) {
             if let data = try? Data(contentsOf: outputURL),
                let pkg = try? JSONDecoder().decode(RecipePackage.self, from: data) {
+                let bundledIcons = pkg.iconCount ?? pkg.icons?.count ?? 0
                 progress = 1.0
-                statusDescription = "Extraction complete! Generated \(pkg.recipeCount) recipes."
-                log("🎉 Successfully created .recipe package: \(pkg.recipeCount) recipes across \(pkg.categories?.count ?? 0) categories!")
+                statusDescription = "Extraction complete! \(pkg.recipeCount) recipes & \(bundledIcons) icons."
+                log("🎉 Successfully created .recipe package: \(pkg.recipeCount) recipes and \(bundledIcons) version-isolated inventory icons across \(pkg.categories?.count ?? 0) categories!")
                 self.generatedRecipePackage = pkg
                 self.outputFileURL = outputURL
                 return
@@ -140,7 +163,9 @@ final class RecipeExtractorService: ObservableObject {
         useDataGenerator: Bool
     ) async -> Bool {
         let javaBin = findJavaExecutable() ?? "java"
+        let pythonBin = findPythonExecutable()
         log("Detected Java Runtime: \(javaBin)")
+        log("Detected Python Runtime: \(pythonBin)")
 
         var env = ProcessInfo.processInfo.environment
         let javaParent = (javaBin as NSString).deletingLastPathComponent
@@ -149,7 +174,6 @@ final class RecipeExtractorService: ObservableObject {
             env["PATH"] = "\(javaParent):\(currentPath)"
         }
 
-        let pythonBin = "/usr/bin/python3"
         var args = [
             scriptPath,
             "--jar", jarURL.path,
@@ -162,7 +186,7 @@ final class RecipeExtractorService: ObservableObject {
         }
 
         progress = 0.40
-        statusDescription = "Processing Minecraft recipes…"
+        statusDescription = "Processing Minecraft recipes & rendering inventory icons…"
 
         let finalArgs = args
         let finalEnv = env

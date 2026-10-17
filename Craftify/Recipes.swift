@@ -16,8 +16,35 @@ struct RecipePackage: Codable, Identifiable {
     let createdAt: String?
     let generator: String?
     let recipeCount: Int
+    let iconCount: Int?
     let categories: [String]?
     let recipes: [Recipe]
+    /// Bundled inventory-style PNG icons (keyed by item display name, value is base64-encoded PNG data)
+    let icons: [String: String]?
+
+    init(
+        formatVersion: Int,
+        gameVersion: String,
+        edition: String,
+        createdAt: String?,
+        generator: String?,
+        recipeCount: Int,
+        iconCount: Int? = nil,
+        categories: [String]?,
+        recipes: [Recipe],
+        icons: [String: String]? = nil
+    ) {
+        self.formatVersion = formatVersion
+        self.gameVersion = gameVersion
+        self.edition = edition
+        self.createdAt = createdAt
+        self.generator = generator
+        self.recipeCount = recipeCount
+        self.iconCount = iconCount ?? icons?.count
+        self.categories = categories
+        self.recipes = recipes
+        self.icons = icons
+    }
 
     enum CodingKeys: String, CodingKey {
         case formatVersion = "format_version"
@@ -26,8 +53,10 @@ struct RecipePackage: Codable, Identifiable {
         case createdAt = "created_at"
         case generator
         case recipeCount = "recipe_count"
+        case iconCount = "icon_count"
         case categories
         case recipes
+        case icons
     }
 }
 
@@ -38,13 +67,56 @@ struct RecipeVersionInfo: Identifiable, Codable, Equatable, Hashable {
     var displayName: String
     var edition: String
     var recipeCount: Int
+    var iconCount: Int
     var categories: [String]
     var importedAt: Date
     var isDefault: Bool
     var fileName: String
 
+    init(
+        version: String,
+        displayName: String,
+        edition: String,
+        recipeCount: Int,
+        iconCount: Int = 0,
+        categories: [String],
+        importedAt: Date,
+        isDefault: Bool,
+        fileName: String
+    ) {
+        self.version = version
+        self.displayName = displayName
+        self.edition = edition
+        self.recipeCount = recipeCount
+        self.iconCount = iconCount
+        self.categories = categories
+        self.importedAt = importedAt
+        self.isDefault = isDefault
+        self.fileName = fileName
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case version, displayName, edition, recipeCount, iconCount, categories, importedAt, isDefault, fileName
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.version = try container.decode(String.self, forKey: .version)
+        self.displayName = try container.decode(String.self, forKey: .displayName)
+        self.edition = try container.decode(String.self, forKey: .edition)
+        self.recipeCount = try container.decode(Int.self, forKey: .recipeCount)
+        self.iconCount = try container.decodeIfPresent(Int.self, forKey: .iconCount) ?? 0
+        self.categories = try container.decode([String].self, forKey: .categories)
+        self.importedAt = try container.decode(Date.self, forKey: .importedAt)
+        self.isDefault = try container.decode(Bool.self, forKey: .isDefault)
+        self.fileName = try container.decode(String.self, forKey: .fileName)
+    }
+
     var subtitle: String {
-        "\(edition) • \(recipeCount.formatted()) recipes"
+        if iconCount > 0 {
+            return "\(edition) • \(recipeCount.formatted()) recipes • \(iconCount.formatted()) icons"
+        }
+        return "\(edition) • \(recipeCount.formatted()) recipes"
     }
 }
 

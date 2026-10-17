@@ -263,6 +263,60 @@ extension CraftifyTests {
         #expect(announcement.recipeCount == 2)
     }
 
+    @MainActor
+    @Test func perVersionIconsAreIsolatedAndSwitchCleanly() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appendingPathComponent(
+            UUID().uuidString,
+            isDirectory: true
+        )
+        let persistentDirectory = root.appendingPathComponent("Images", isDirectory: true)
+        let versionIconsDirectory = root.appendingPathComponent("VersionIcons", isDirectory: true)
+        defer { try? fileManager.removeItem(at: root) }
+
+        let suiteName = "CraftImageStoreVersionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let imageStore = CraftImageStore(
+            fileManager: fileManager,
+            defaults: defaults,
+            storageDirectory: persistentDirectory,
+            versionIconsDirectory: versionIconsDirectory
+        )
+
+        // Create two distinct 2x2 solid color PNGs for version 1.21.1 vs 26.3
+        let renderer1 = UIGraphicsImageRenderer(size: CGSize(width: 2, height: 2))
+        let pngV1 = renderer1.pngData { ctx in
+            UIColor.red.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }.base64EncodedString()
+
+        let pngV2 = renderer1.pngData { ctx in
+            UIColor.blue.setFill()
+            ctx.fill(CGRect(x: 0, y: 0, width: 2, height: 2))
+        }.base64EncodedString()
+
+        #expect(imageStore.storeVersionIcons(["Creeper Spawn Egg": pngV1], for: "1.21.1") == 1)
+        #expect(imageStore.storeVersionIcons(["Creeper Spawn Egg": pngV2], for: "26.3") == 1)
+
+        #expect(imageStore.hasVersionIcons(for: "1.21.1"))
+        #expect(imageStore.hasVersionIcons(for: "26.3"))
+
+        imageStore.setActiveVersion("1.21.1")
+        let img1 = imageStore.image(for: "Creeper Spawn Egg")
+        #expect(img1 != nil)
+
+        imageStore.setActiveVersion("26.3")
+        let img2 = imageStore.image(for: "creeper_spawn_egg")
+        #expect(img2 != nil)
+        #expect(img1?.pngData() != img2?.pngData())
+
+        imageStore.removeVersionIcons(for: "1.21.1")
+        #expect(!imageStore.hasVersionIcons(for: "1.21.1"))
+        #expect(imageStore.hasVersionIcons(for: "26.3"))
+    }
+
     private func announcementRecipe(id: Int, name: String) -> Recipe {
         Recipe(
             id: id,

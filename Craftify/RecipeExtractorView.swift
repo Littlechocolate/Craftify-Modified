@@ -223,13 +223,14 @@ struct RecipeExtractorView: View {
     // MARK: - Result Card
 
     private func resultCard(_ pkg: RecipePackage) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        let bundledIcons = pkg.iconCount ?? pkg.icons?.count ?? 0
+        return VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
                 CraftifyIconTile(symbol: "checkmark.seal.fill", size: 44)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Package Created: Minecraft \(pkg.gameVersion)")
                         .font(.headline)
-                    Text("\(pkg.recipeCount.formatted()) recipes processed & categorized")
+                    Text("\(pkg.recipeCount.formatted()) recipes • \(bundledIcons.formatted()) version-isolated icons")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

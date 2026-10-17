@@ -3,7 +3,7 @@
 //  Craftify
 //
 //  Created by Dave Van Cauwenberghe on 07/02/2025.
-//  Optimized for local multi-version recipe import and management.
+//  Optimized for local multi-version recipe import, management, and per-version isolated icon packaging.
 //
 
 import Foundation
@@ -22,8 +22,12 @@ final class RecipeVersionManager: ObservableObject {
     @Published private(set) var installedVersions: [RecipeVersionInfo] = []
     @Published var activeVersion: String = "" {
         didSet {
-            if oldValue != activeVersion && !activeVersion.isEmpty {
-                defaults.set(activeVersion, forKey: activeVersionKey)
+            if !activeVersion.isEmpty {
+                if oldValue != activeVersion {
+                    defaults.set(activeVersion, forKey: activeVersionKey)
+                }
+                ensureVersionIconsUnpacked(for: activeVersion)
+                CraftImageStore.shared.setActiveVersion(activeVersion)
             }
         }
     }
@@ -45,6 +49,10 @@ final class RecipeVersionManager: ObservableObject {
     init() {
         loadInstalledVersions()
         seedBundledVersionsIfNeeded()
+        if !activeVersion.isEmpty {
+            ensureVersionIconsUnpacked(for: activeVersion)
+            CraftImageStore.shared.setActiveVersion(activeVersion)
+        }
     }
 
     // MARK: - Version Loading
@@ -78,7 +86,11 @@ final class RecipeVersionManager: ObservableObject {
         let bundleRecipes = Bundle.main.urls(forResourcesWithExtension: "recipe", subdirectory: nil) ?? []
         for url in bundleRecipes {
             let verName = url.deletingPathExtension().lastPathComponent
-            if !installedVersions.contains(where: { $0.version == verName }) {
+            let existing = installedVersions.first(where: { $0.version == verName })
+            let needsIconUpgrade = existing != nil && existing!.isDefault && (
+                existing!.iconCount == 0 || !CraftImageStore.shared.hasVersionIcons(for: verName)
+            )
+            if existing == nil || needsIconUpgrade {
                 _ = importBundledRecipe(from: url, isDefault: true)
             }
         }
@@ -88,6 +100,11 @@ final class RecipeVersionManager: ObservableObject {
             if let defaultURL = Bundle.main.url(forResource: "1.21.1", withExtension: "recipe") {
                 _ = importBundledRecipe(from: defaultURL, isDefault: true)
             }
+        }
+
+        // Ensure all installed versions have their bundled icons unpacked
+        for info in installedVersions {
+            ensureVersionIconsUnpacked(for: info.version)
         }
 
         if activeVersion.isEmpty, let first = installedVersions.first {
@@ -105,11 +122,17 @@ final class RecipeVersionManager: ObservableObject {
         let destURL = storageDirectory.appendingPathComponent(fileName)
         try? data.write(to: destURL)
 
+        var storedIcons = package.iconCount ?? 0
+        if let icons = package.icons, !icons.isEmpty {
+            storedIcons = CraftImageStore.shared.storeVersionIcons(icons, for: package.gameVersion)
+        }
+
         let info = RecipeVersionInfo(
             version: package.gameVersion,
             displayName: "Minecraft \(package.gameVersion)",
             edition: package.edition,
             recipeCount: package.recipeCount,
+            iconCount: storedIcons,
             categories: package.categories ?? [],
             importedAt: Date(),
             isDefault: isDefault,
@@ -120,6 +143,27 @@ final class RecipeVersionManager: ObservableObject {
         installedVersions.append(info)
         saveMetadata()
         return true
+    }
+
+    func ensureVersionIconsUnpacked(for version: String) {
+        guard !CraftImageStore.shared.hasVersionIcons(for: version),
+              let idx = installedVersions.firstIndex(where: { $0.version == version }) else {
+            return
+        }
+        let info = installedVersions[idx]
+        let fileURL = storageDirectory.appendingPathComponent(info.fileName)
+        guard let data = try? Data(contentsOf: fileURL),
+              let package = try? decodeRecipePackage(from: data),
+              let icons = package.icons,
+              !icons.isEmpty else {
+            return
+        }
+
+        let count = CraftImageStore.shared.storeVersionIcons(icons, for: version)
+        if count > 0 && installedVersions[idx].iconCount != count {
+            installedVersions[idx].iconCount = count
+            saveMetadata()
+        }
     }
 
     // MARK: - Active Recipes Provider
@@ -137,6 +181,9 @@ final class RecipeVersionManager: ObservableObject {
         guard let data = try? Data(contentsOf: fileURL),
               let package = try? decodeRecipePackage(from: data) else {
             return []
+        }
+        if let icons = package.icons, !icons.isEmpty, !CraftImageStore.shared.hasVersionIcons(for: version) {
+            _ = CraftImageStore.shared.storeVersionIcons(icons, for: version)
         }
         return package.recipes
     }
@@ -184,7 +231,7 @@ final class RecipeVersionManager: ObservableObject {
             return completeSave(package: package, rawData: rawData, asVersion: package.gameVersion, overwrite: true)
 
         case .keepBoth:
-            // Generate a unique version string: e.g. "1.21.1 (2)"
+            // Generate a unique version string: e.g. "1.21.1 (1)"
             let newVersion = generateUniqueVersionName(base: package.gameVersion)
             return completeSave(package: package, rawData: rawData, asVersion: newVersion, overwrite: false)
         }
@@ -196,12 +243,12 @@ final class RecipeVersionManager: ObservableObject {
         asVersion targetVersion: String,
         overwrite: Bool = false
     ) -> ImportOutcome {
-        let sanitized = targetVersion.replacingOccurrences(of: "/", with: "-")
+        let sanitized = CraftImageAssetKey.sanitizeVersionIdentifier(targetVersion)
         let fileName = "\(sanitized).recipe"
         let destURL = storageDirectory.appendingPathComponent(fileName)
 
         var finalData = rawData
-        // If version name was altered for "keep both", patch version in json
+        // If version name was altered for "keep both", patch version in json while preserving bundled icons
         if targetVersion != package.gameVersion {
             let modifiedPackage = RecipePackage(
                 formatVersion: package.formatVersion,
@@ -210,8 +257,10 @@ final class RecipeVersionManager: ObservableObject {
                 createdAt: package.createdAt,
                 generator: package.generator,
                 recipeCount: package.recipeCount,
+                iconCount: package.iconCount,
                 categories: package.categories,
-                recipes: package.recipes
+                recipes: package.recipes,
+                icons: package.icons
             )
             if let encoded = try? JSONEncoder().encode(modifiedPackage) {
                 finalData = encoded
@@ -224,11 +273,19 @@ final class RecipeVersionManager: ObservableObject {
             return .failure("Failed to save recipe file: \(error.localizedDescription)")
         }
 
+        var storedIcons = package.iconCount ?? 0
+        if let icons = package.icons, !icons.isEmpty {
+            storedIcons = CraftImageStore.shared.storeVersionIcons(icons, for: targetVersion)
+        } else if overwrite {
+            CraftImageStore.shared.removeVersionIcons(for: targetVersion)
+        }
+
         let info = RecipeVersionInfo(
             version: targetVersion,
             displayName: "Minecraft \(targetVersion)",
             edition: package.edition,
             recipeCount: package.recipeCount,
+            iconCount: storedIcons,
             categories: package.categories ?? [],
             importedAt: Date(),
             isDefault: false,
@@ -253,6 +310,7 @@ final class RecipeVersionManager: ObservableObject {
         let info = installedVersions[index]
         let fileURL = storageDirectory.appendingPathComponent(info.fileName)
         try? fileManager.removeItem(at: fileURL)
+        CraftImageStore.shared.removeVersionIcons(for: version)
 
         installedVersions.remove(at: index)
         saveMetadata()
@@ -296,8 +354,10 @@ final class RecipeVersionManager: ObservableObject {
                 createdAt: nil,
                 generator: "Imported Array",
                 recipeCount: recipes.count,
+                iconCount: 0,
                 categories: cats,
-                recipes: recipes
+                recipes: recipes,
+                icons: nil
             )
         }
         throw NSError(domain: "RecipeVersionManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid recipe format"])

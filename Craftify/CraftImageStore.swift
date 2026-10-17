@@ -5,6 +5,7 @@
 //  Created by Dave Van Cauwenberghe on 03/08/2026.
 //
 
+import Combine
 import Foundation
 import SwiftUI
 import UIKit
@@ -23,15 +24,34 @@ enum CraftImageAssetKey {
             .replacingOccurrences(of: "=", with: "")
         return "asset-\(encoded)"
     }
+
+    static func normalizedAssetKey(_ assetKey: String) -> String {
+        assetKey
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .replacingOccurrences(of: "_", with: " ")
+    }
+
+    static func sanitizeVersionIdentifier(_ version: String) -> String {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "default" }
+        return trimmed
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+            .replacingOccurrences(of: "\\", with: "-")
+    }
 }
 
 @MainActor
 final class CraftImageStore: ObservableObject {
     static let shared = CraftImageStore()
 
+    @Published private(set) var activeVersion: String = ""
+
     private let fileManager: FileManager
     private let defaults: UserDefaults
     private let imageDirectory: URL
+    private let versionIconsRootDirectory: URL
     private let legacyCacheDirectory: URL
     private let imageCache = NSCache<NSString, UIImage>()
     private var loadingKeys: Set<String> = []
@@ -39,6 +59,7 @@ final class CraftImageStore: ObservableObject {
     private var storageGeneration = 0
 
     private static let versionDefaultsPrefix = "craft-image.version."
+    private static let activeVersionDefaultsKey = "craftify.activeRecipeVersion"
     private let queryBatchSize = 100
     private let refreshInterval: TimeInterval = 15 * 60
 
@@ -47,6 +68,7 @@ final class CraftImageStore: ObservableObject {
         fileManager: FileManager = .default,
         defaults: UserDefaults = .standard,
         storageDirectory: URL? = nil,
+        versionIconsDirectory: URL? = nil,
         legacyCacheDirectory: URL? = nil
     ) {
         self.fileManager = fileManager
@@ -58,27 +80,152 @@ final class CraftImageStore: ObservableObject {
         )[0]
         self.imageDirectory = storageDirectory ?? applicationSupportRoot
             .appendingPathComponent("CraftImageAssets", isDirectory: true)
+        self.versionIconsRootDirectory = versionIconsDirectory ?? applicationSupportRoot
+            .appendingPathComponent("CraftVersionIconPacks", isDirectory: true)
 
         let cachesRoot = fileManager.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         self.legacyCacheDirectory = legacyCacheDirectory ?? cachesRoot
             .appendingPathComponent("CraftImageAssets", isDirectory: true)
 
+        self.activeVersion = defaults.string(forKey: Self.activeVersionDefaultsKey) ?? ""
+
         prepareStorage()
-        imageCache.countLimit = 300
+        imageCache.countLimit = 600
     }
 
-    func image(for assetKey: String) -> UIImage? {
-        let cacheKey = assetKey as NSString
-        if let image = imageCache.object(forKey: cacheKey) {
-            return image
+    // MARK: - Per-Version Icon Isolation
+
+    func setActiveVersion(_ version: String) {
+        let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard activeVersion != trimmed else { return }
+        activeVersion = trimmed
+        objectWillChange.send()
+    }
+
+    func versionDirectory(for version: String) -> URL {
+        let sanitized = CraftImageAssetKey.sanitizeVersionIdentifier(version)
+        return versionIconsRootDirectory.appendingPathComponent(sanitized, isDirectory: true)
+    }
+
+    func hasVersionIcons(for version: String) -> Bool {
+        versionIconCount(for: version) > 0
+    }
+
+    func versionIconCount(for version: String) -> Int {
+        let dir = versionDirectory(for: version)
+        guard fileManager.fileExists(atPath: dir.path),
+              let contents = try? fileManager.contentsOfDirectory(
+                at: dir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+              ) else {
+            return 0
+        }
+        return contents.count
+    }
+
+    @discardableResult
+    func storeVersionIcons(_ icons: [String: String], for version: String) -> Int {
+        let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedVersion.isEmpty, !icons.isEmpty else { return 0 }
+
+        let dir = versionDirectory(for: trimmedVersion)
+        try? fileManager.removeItem(at: dir)
+        try? fileManager.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        var dirURL = dir
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try? dirURL.setResourceValues(resourceValues)
+
+        var storedCount = 0
+        for (rawKey, base64String) in icons {
+            let trimmedKey = rawKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedKey.isEmpty,
+                  let data = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters),
+                  !data.isEmpty else {
+                continue
+            }
+
+            let normalizedKey = CraftImageAssetKey.normalizedAssetKey(trimmedKey)
+            let fileURL = dir.appendingPathComponent(
+                CraftImageAssetKey.recordName(for: normalizedKey),
+                isDirectory: false
+            )
+            do {
+                try data.write(to: fileURL, options: .atomic)
+                storedCount += 1
+            } catch {
+                continue
+            }
         }
 
-        if let image = UIImage(contentsOfFile: cachedFileURL(for: assetKey).path) {
+        imageCache.removeAllObjects()
+        storageGeneration += 1
+        objectWillChange.send()
+        return storedCount
+    }
+
+    func removeVersionIcons(for version: String) {
+        let trimmedVersion = version.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedVersion.isEmpty else { return }
+        let dir = versionDirectory(for: trimmedVersion)
+        if fileManager.fileExists(atPath: dir.path) {
+            try? fileManager.removeItem(at: dir)
+        }
+        imageCache.removeAllObjects()
+        objectWillChange.send()
+    }
+
+    // MARK: - Image Lookup
+
+    func image(for assetKey: String, version: String? = nil) -> UIImage? {
+        let trimmedKey = assetKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return nil }
+
+        let resolvedVersion = (version ?? activeVersion).trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedKey = CraftImageAssetKey.normalizedAssetKey(trimmedKey)
+        let cacheKey = "\(resolvedVersion)::\(normalizedKey)" as NSString
+
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        // 1. Look up in the active version's isolated icon package first
+        if !resolvedVersion.isEmpty {
+            let verDir = versionDirectory(for: resolvedVersion)
+            let normalizedFile = verDir.appendingPathComponent(
+                CraftImageAssetKey.recordName(for: normalizedKey),
+                isDirectory: false
+            )
+            if let image = UIImage(contentsOfFile: normalizedFile.path) {
+                imageCache.setObject(image, forKey: cacheKey)
+                return image
+            }
+
+            let exactFile = verDir.appendingPathComponent(
+                CraftImageAssetKey.recordName(for: trimmedKey),
+                isDirectory: false
+            )
+            if let image = UIImage(contentsOfFile: exactFile.path) {
+                imageCache.setObject(image, forKey: cacheKey)
+                return image
+            }
+        }
+
+        // 2. Fallback to persistent downloaded image directory
+        if let image = UIImage(contentsOfFile: cachedFileURL(for: trimmedKey).path) {
             imageCache.setObject(image, forKey: cacheKey)
             return image
         }
 
-        return UIImage(named: assetKey)
+        // 3. Fallback to bundled Assets.xcassets
+        if let bundled = UIImage(named: trimmedKey) {
+            imageCache.setObject(bundled, forKey: cacheKey)
+            return bundled
+        }
+
+        return nil
     }
 
     func prefetch(recipes: [Recipe]) {
@@ -254,6 +401,7 @@ final class CraftImageStore: ObservableObject {
     private func prepareStorage() {
         do {
             try createImageDirectory()
+            try createVersionIconsRootDirectory()
             migrateLegacyImagesIfNeeded()
         } catch {
             print("Unable to prepare persistent image storage: \(error.localizedDescription)")
@@ -274,6 +422,18 @@ final class CraftImageStore: ObservableObject {
         } catch {
             print("Unable to exclude downloaded images from backup: \(error.localizedDescription)")
         }
+    }
+
+    private func createVersionIconsRootDirectory() throws {
+        try fileManager.createDirectory(
+            at: versionIconsRootDirectory,
+            withIntermediateDirectories: true
+        )
+
+        var directoryURL = versionIconsRootDirectory
+        var resourceValues = URLResourceValues()
+        resourceValues.isExcludedFromBackup = true
+        try? directoryURL.setResourceValues(resourceValues)
     }
 
     private func migrateLegacyImagesIfNeeded() {
@@ -317,7 +477,7 @@ final class CraftImageStore: ObservableObject {
 
     private func removeCachedRemoteImage(for assetKey: String) {
         try? fileManager.removeItem(at: cachedFileURL(for: assetKey))
-        imageCache.removeObject(forKey: assetKey as NSString)
+        imageCache.removeAllObjects()
         defaults.removeObject(forKey: versionDefaultsKey(for: assetKey))
     }
 }
@@ -341,7 +501,7 @@ struct CraftImage: View {
 
     var body: some View {
         Group {
-            if let image = store.image(for: key) {
+            if let image = store.image(for: key, version: store.activeVersion) {
                 Image(uiImage: image)
                     .resizable()
                     .interpolation(.none)
@@ -352,7 +512,7 @@ struct CraftImage: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .task(id: key) {
+        .task(id: "\(store.activeVersion)::\(key)") {
             await store.load(key)
         }
     }
