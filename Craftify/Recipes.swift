@@ -145,6 +145,26 @@ enum DuplicateResolution: String, CaseIterable, Identifiable {
     }
 }
 
+struct CraftingVariant: Codable, Equatable, Hashable {
+    let ingredients: [String]
+    let output: Int
+    let imageremark: String?
+    let remarks: String?
+
+    var isCookingLayout: Bool {
+        guard let station = imageremark else { return false }
+        return ["Furnace", "Blast Furnace", "Smoker", "Campfire"].contains(station)
+    }
+
+    var normalizedIngredients: [String] {
+        let maximum = isCookingLayout ? 2 : 9
+        if ingredients.count < maximum {
+            return ingredients + Array(repeating: "", count: maximum - ingredients.count)
+        }
+        return Array(ingredients.prefix(maximum))
+    }
+}
+
 struct Recipe: Codable, Identifiable, Equatable, Hashable {
     let id: Int
     let name: String
@@ -162,6 +182,45 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
     let category: String
     let imageremark: String?
     let remarks: String?
+    let variants: [CraftingVariant]?
+
+    init(
+        id: Int,
+        name: String,
+        image: String,
+        ingredients: [String],
+        alternateIngredients: [String]? = nil,
+        alternateIngredients1: [String]? = nil,
+        alternateIngredients2: [String]? = nil,
+        alternateIngredients3: [String]? = nil,
+        output: Int,
+        alternateOutput: Int? = nil,
+        alternateOutput1: Int? = nil,
+        alternateOutput2: Int? = nil,
+        alternateOutput3: Int? = nil,
+        category: String,
+        imageremark: String? = nil,
+        remarks: String? = nil,
+        variants: [CraftingVariant]? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.image = image
+        self.ingredients = ingredients
+        self.alternateIngredients = alternateIngredients
+        self.alternateIngredients1 = alternateIngredients1
+        self.alternateIngredients2 = alternateIngredients2
+        self.alternateIngredients3 = alternateIngredients3
+        self.output = output
+        self.alternateOutput = alternateOutput
+        self.alternateOutput1 = alternateOutput1
+        self.alternateOutput2 = alternateOutput2
+        self.alternateOutput3 = alternateOutput3
+        self.category = category
+        self.imageremark = imageremark
+        self.remarks = remarks
+        self.variants = variants
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, name, image, ingredients
@@ -174,7 +233,147 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
              alternateOutput1,
              alternateOutput2,
              alternateOutput3
-        case category, imageremark, remarks
+        case category, imageremark, remarks, variants
+    }
+
+    private static let stationPriority: [String: Int] = [
+        "Crafting Table": 0,
+        "Stonecutter": 1,
+        "Smithing Table": 2,
+        "Furnace": 3,
+        "Blast Furnace": 4,
+        "Smoker": 5,
+        "Campfire": 6
+    ]
+
+    var resolvedVariants: [CraftingVariant] {
+        if let variants, !variants.isEmpty {
+            return variants
+        }
+        var list: [CraftingVariant] = [
+            CraftingVariant(
+                ingredients: ingredients,
+                output: output,
+                imageremark: imageremark,
+                remarks: remarks
+            )
+        ]
+        let altPairs: [([String]?, Int?)] = [
+            (alternateIngredients, alternateOutput),
+            (alternateIngredients1, alternateOutput1),
+            (alternateIngredients2, alternateOutput2),
+            (alternateIngredients3, alternateOutput3)
+        ]
+        for (altIngs, altOut) in altPairs {
+            if let altIngs, !altIngs.isEmpty {
+                list.append(
+                    CraftingVariant(
+                        ingredients: altIngs,
+                        output: altOut ?? output,
+                        imageremark: imageremark,
+                        remarks: remarks
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    var craftingUtilities: [String] {
+        var seen = Set<String>()
+        var utilities: [String] = []
+        for variant in resolvedVariants {
+            if let station = variant.imageremark?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !station.isEmpty,
+               !seen.contains(station) {
+                seen.insert(station)
+                utilities.append(station)
+            }
+        }
+        if utilities.isEmpty,
+           let fallback = imageremark?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !fallback.isEmpty {
+            utilities.append(fallback)
+        }
+        return utilities.sorted {
+            (Self.stationPriority[$0] ?? 99) < (Self.stationPriority[$1] ?? 99)
+        }
+    }
+
+    var allIngredientNames: [String] {
+        var result: [String] = []
+        for variant in resolvedVariants {
+            for ing in variant.ingredients where !ing.isEmpty {
+                result.append(ing)
+            }
+        }
+        return result
+    }
+
+    static func mergedByItemName(_ recipes: [Recipe]) -> [Recipe] {
+        var grouped: [String: [Recipe]] = [:]
+        for recipe in recipes {
+            grouped[recipe.name, default: []].append(recipe)
+        }
+
+        var mergedList: [Recipe] = []
+        let sortedNames = grouped.keys.sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+
+        for (index, itemName) in sortedNames.enumerated() {
+            guard let group = grouped[itemName], !group.isEmpty else { continue }
+            if group.count == 1, let single = group.first, single.variants != nil {
+                mergedList.append(single)
+                continue
+            }
+
+            let sortedGroup = group.sorted { a, b in
+                let pA = stationPriority[a.imageremark ?? ""] ?? 99
+                let pB = stationPriority[b.imageremark ?? ""] ?? 99
+                if pA != pB { return pA < pB }
+                return a.output > b.output
+            }
+            let primary = sortedGroup[0]
+
+            var uniqueVariants: [CraftingVariant] = []
+            for r in sortedGroup {
+                for v in r.resolvedVariants {
+                    if !uniqueVariants.contains(v) {
+                        uniqueVariants.append(v)
+                    }
+                }
+            }
+
+            let firstVar = uniqueVariants.first ?? CraftingVariant(
+                ingredients: primary.ingredients,
+                output: primary.output,
+                imageremark: primary.imageremark,
+                remarks: primary.remarks
+            )
+
+            mergedList.append(
+                Recipe(
+                    id: primary.id > 0 ? primary.id : (index + 1),
+                    name: primary.name,
+                    image: primary.image,
+                    ingredients: firstVar.ingredients,
+                    alternateIngredients: uniqueVariants.count > 1 ? uniqueVariants[1].ingredients : nil,
+                    alternateIngredients1: uniqueVariants.count > 2 ? uniqueVariants[2].ingredients : nil,
+                    alternateIngredients2: uniqueVariants.count > 3 ? uniqueVariants[3].ingredients : nil,
+                    alternateIngredients3: uniqueVariants.count > 4 ? uniqueVariants[4].ingredients : nil,
+                    output: firstVar.output,
+                    alternateOutput: uniqueVariants.count > 1 ? uniqueVariants[1].output : nil,
+                    alternateOutput1: uniqueVariants.count > 2 ? uniqueVariants[2].output : nil,
+                    alternateOutput2: uniqueVariants.count > 3 ? uniqueVariants[3].output : nil,
+                    alternateOutput3: uniqueVariants.count > 4 ? uniqueVariants[4].output : nil,
+                    category: primary.category,
+                    imageremark: firstVar.imageremark,
+                    remarks: firstVar.remarks,
+                    variants: uniqueVariants
+                )
+            )
+        }
+
+        return mergedList
     }
 
     static func == (lhs: Recipe, rhs: Recipe) -> Bool {
@@ -193,7 +392,8 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
                lhs.alternateOutput3 == rhs.alternateOutput3 &&
                lhs.category == rhs.category &&
                lhs.imageremark == rhs.imageremark &&
-               lhs.remarks == rhs.remarks
+               lhs.remarks == rhs.remarks &&
+               lhs.variants == rhs.variants
     }
 
     func hash(into hasher: inout Hasher) {
@@ -213,6 +413,7 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         hasher.combine(category)
         hasher.combine(imageremark)
         hasher.combine(remarks)
+        hasher.combine(variants)
     }
 }
 

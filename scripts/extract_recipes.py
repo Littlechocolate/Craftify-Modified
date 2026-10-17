@@ -376,6 +376,14 @@ def collect_recipe_item_keys(recipes: List[dict]) -> set:
                 for ing in ing_list:
                     if ing and isinstance(ing, str) and ing.strip():
                         keys.add(ing.strip())
+        for var in r.get("variants") or []:
+            if isinstance(var, dict):
+                station = var.get("imageremark")
+                if station and isinstance(station, str) and station.strip():
+                    keys.add(station.strip())
+                for ing in var.get("ingredients") or []:
+                    if ing and isinstance(ing, str) and ing.strip():
+                        keys.add(ing.strip())
     return keys
 
 
@@ -595,22 +603,64 @@ def create_recipe_package(
     raw_recipes = extract_recipes_from_jar(jar_path, run_generator=run_generator, version=version)
     print(f"[Craftify] Extracted {len(raw_recipes)} raw recipe definitions.")
 
-    processed_recipes = []
+    grouped_by_name: Dict[str, List[dict]] = {}
     seen_keys = set()
-    next_id = 1
 
     for raw in raw_recipes:
-        recipe = process_recipe_json(raw, next_id, version)
+        recipe = process_recipe_json(raw, 1, version)
         if not recipe:
             continue
         key = (recipe["name"], tuple(recipe["ingredients"]), recipe["output"], recipe["imageremark"])
         if key in seen_keys:
             continue
         seen_keys.add(key)
-        processed_recipes.append(recipe)
-        next_id += 1
+        grouped_by_name.setdefault(recipe["name"], []).append(recipe)
 
-    processed_recipes.sort(key=lambda r: r["name"])
+    station_priority = {
+        "Crafting Table": 0,
+        "Stonecutter": 1,
+        "Smithing Table": 2,
+        "Furnace": 3,
+        "Blast Furnace": 4,
+        "Smoker": 5,
+        "Campfire": 6,
+    }
+
+    processed_recipes = []
+    for next_id, item_name in enumerate(sorted(grouped_by_name.keys()), start=1):
+        group = grouped_by_name[item_name]
+        group.sort(key=lambda r: (station_priority.get(r.get("imageremark") or "", 99), -int(r.get("output") or 1), r.get("ingredients") or []))
+        primary = group[0]
+        variants = [
+            {
+                "ingredients": r["ingredients"],
+                "output": r["output"],
+                "imageremark": r["imageremark"],
+                "remarks": r["remarks"],
+            }
+            for r in group
+        ]
+        merged = {
+            "id": next_id,
+            "name": primary["name"],
+            "image": primary["image"],
+            "ingredients": primary["ingredients"],
+            "alternateIngredients": group[1]["ingredients"] if len(group) > 1 else None,
+            "alternateIngredients1": group[2]["ingredients"] if len(group) > 2 else None,
+            "alternateIngredients2": group[3]["ingredients"] if len(group) > 3 else None,
+            "alternateIngredients3": group[4]["ingredients"] if len(group) > 4 else None,
+            "output": primary["output"],
+            "alternateOutput": group[1]["output"] if len(group) > 1 else None,
+            "alternateOutput1": group[2]["output"] if len(group) > 2 else None,
+            "alternateOutput2": group[3]["output"] if len(group) > 3 else None,
+            "alternateOutput3": group[4]["output"] if len(group) > 4 else None,
+            "category": primary["category"],
+            "imageremark": primary["imageremark"],
+            "remarks": primary["remarks"],
+            "variants": variants,
+        }
+        processed_recipes.append(merged)
+
     categories = sorted(list(set(r["category"] for r in processed_recipes if r["category"])))
 
     icons: Dict[str, str] = {}

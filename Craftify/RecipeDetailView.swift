@@ -24,35 +24,37 @@ struct RecipeDetailView: View {
     @State private var selectedItem: SelectedItem?
     @State private var showingChestPicker = false
     @State private var selectedCraftingOption = 0
-    @State private var ingredientSets: [[String]] = []
-    @State private var outputs: [Int] = []
-
-    private var currentIngredients: [String] {
-        guard ingredientSets.indices.contains(selectedCraftingOption) else { return [] }
-        return ingredientSets[selectedCraftingOption]
+    private var variants: [CraftingVariant] {
+        recipe.resolvedVariants
     }
 
-    private var currentOutput: Int {
-        guard outputs.indices.contains(selectedCraftingOption) else { return recipe.output }
-        return outputs[selectedCraftingOption]
+    private var safeSelectedOption: Int {
+        guard !variants.isEmpty else { return 0 }
+        return min(max(selectedCraftingOption, 0), variants.count - 1)
+    }
+
+    private var currentVariant: CraftingVariant {
+        let list = variants
+        guard list.indices.contains(safeSelectedOption) else {
+            return CraftingVariant(
+                ingredients: recipe.ingredients,
+                output: recipe.output,
+                imageremark: recipe.imageremark,
+                remarks: recipe.remarks
+            )
+        }
+        return list[safeSelectedOption]
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20) {
-                RecipeIdentityHeader(recipe: recipe, output: currentOutput)
-
-                AlternateRecipesSelector(
-                    ingredientSets: ingredientSets,
-                    selectedCraftingOption: $selectedCraftingOption,
-                    selectedDetail: $selectedDetail,
-                    selectedItem: $selectedItem
-                )
+                RecipeIdentityHeader(recipe: recipe, output: currentVariant.output)
 
                 CraftingRecipeCard(
                     recipe: recipe,
-                    ingredients: currentIngredients,
-                    output: currentOutput,
+                    variants: variants,
+                    selectedCraftingOption: $selectedCraftingOption,
                     selectedItem: $selectedItem,
                     selectedDetail: $selectedDetail
                 )
@@ -66,8 +68,6 @@ struct RecipeDetailView: View {
                     )
                     .transition(reduceMotion ? .opacity : .scale(scale: 0.97).combined(with: .opacity))
                 }
-
-                RemarkAndCategoryView(recipe: recipe)
             }
             .craftifyContentWidth()
             .padding(.horizontal, CraftifyLayout.pagePadding(for: horizontalSizeClass))
@@ -91,45 +91,16 @@ struct RecipeDetailView: View {
                 .environmentObject(dataManager)
         }
         .craftifyPage()
-        .onAppear {
-            ingredientSets = computeIngredientSets()
-            outputs = computeOutputs()
+        .onChange(of: selectedCraftingOption) { _, _ in
+            selectedDetail = nil
+            selectedItem = nil
+            HapticFeedback.selection()
         }
         .onChange(of: dataManager.isLoading) { _, isLoading in
             if !isLoading && dataManager.isManualSyncing { dataManager.syncChests() }
         }
         .animation(reduceMotion ? nil : .snappy, value: selectedDetail)
         .animation(reduceMotion ? nil : .snappy, value: selectedCraftingOption)
-    }
-
-    private func computeIngredientSets() -> [[String]] {
-        let maximum = recipe.imageremark == "Furnace" ? 2 : 9
-        let alternates = [
-            recipe.alternateIngredients,
-            recipe.alternateIngredients1,
-            recipe.alternateIngredients2,
-            recipe.alternateIngredients3
-        ]
-        let allSets = [recipe.ingredients] + alternates.compactMap { ingredients in
-            guard let ingredients, !ingredients.isEmpty else { return nil }
-            return ingredients
-        }
-
-        return allSets.map { ingredients in
-            if ingredients.count < maximum {
-                return ingredients + Array(repeating: "", count: maximum - ingredients.count)
-            }
-            return Array(ingredients.prefix(maximum))
-        }
-    }
-
-    private func computeOutputs() -> [Int] {
-        var result = [recipe.output]
-        if recipe.alternateIngredients?.isEmpty == false { result.append(recipe.alternateOutput ?? recipe.output) }
-        if recipe.alternateIngredients1?.isEmpty == false { result.append(recipe.alternateOutput1 ?? recipe.output) }
-        if recipe.alternateIngredients2?.isEmpty == false { result.append(recipe.alternateOutput2 ?? recipe.output) }
-        if recipe.alternateIngredients3?.isEmpty == false { result.append(recipe.alternateOutput3 ?? recipe.output) }
-        return result
     }
 }
 
@@ -300,57 +271,10 @@ private struct AddRecipeToChestView: View {
 }
 
 @MainActor
-struct AlternateRecipesSelector: View {
-    let ingredientSets: [[String]]
-    @Binding var selectedCraftingOption: Int
-    @Binding var selectedDetail: String?
-    @Binding var selectedItem: SelectedItem?
-    @Environment(\.craftifyAccentColor) private var accent
-
-    var body: some View {
-        if ingredientSets.count > 1 {
-            VStack(alignment: .leading, spacing: 10) {
-                CraftifySectionHeader(
-                    title: "Crafting Options",
-                    detail: "Choose an ingredient combination."
-                )
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(ingredientSets.indices, id: \.self) { index in
-                            let isSelected = selectedCraftingOption == index
-                            Button("Option \(index + 1)") {
-                                selectedCraftingOption = index
-                                selectedDetail = nil
-                                selectedItem = nil
-                                HapticFeedback.selection()
-                            }
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(isSelected ? Color.white : Color.primary)
-                            .padding(.horizontal, 15)
-                            .padding(.vertical, 9)
-                            .background(
-                                isSelected ? accent : Color.primary.opacity(0.06),
-                                in: Capsule()
-                            )
-                            .buttonStyle(.plain)
-                            .accessibilityValue(isSelected ? "Selected" : "Not selected")
-                        }
-                    }
-                    .padding(.vertical, 2)
-                }
-            }
-            .padding(18)
-            .craftifyCard(cornerRadius: 22)
-        }
-    }
-}
-
-@MainActor
 private struct CraftingRecipeCard: View {
     let recipe: Recipe
-    let ingredients: [String]
-    let output: Int
+    let variants: [CraftingVariant]
+    @Binding var selectedCraftingOption: Int
     @Binding var selectedItem: SelectedItem?
     @Binding var selectedDetail: String?
 
@@ -362,63 +286,155 @@ private struct CraftingRecipeCard: View {
         horizontalSizeClass == .regular ? 76 : 64
     }
 
+    private var safeIndex: Int {
+        guard !variants.isEmpty else { return 0 }
+        return min(max(selectedCraftingOption, 0), variants.count - 1)
+    }
+
+    private var activeVariant: CraftingVariant {
+        guard variants.indices.contains(safeIndex) else {
+            return CraftingVariant(
+                ingredients: recipe.ingredients,
+                output: recipe.output,
+                imageremark: recipe.imageremark,
+                remarks: recipe.remarks
+            )
+        }
+        return variants[safeIndex]
+    }
+
+    private var pageViewHeight: CGFloat {
+        let gridHeight = cellSize * 3 + 12
+        if dynamicTypeSize.isAccessibilitySize {
+            return gridHeight + cellSize + 96
+        }
+        return gridHeight + 16
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            CraftifySectionHeader(
-                title: recipe.imageremark == "Furnace" ? "Smelting Layout" : "Crafting Layout",
-                detail: "Tap an ingredient or the output to inspect it.",
-                symbol: recipe.imageremark == "Furnace" ? "flame.fill" : "square.grid.3x3.fill"
-            )
+            HStack(alignment: .top, spacing: 12) {
+                CraftifySectionHeader(
+                    title: activeVariant.isCookingLayout ? "Smelting Layout" : "Crafting Layout",
+                    detail: variants.count > 1
+                        ? "Swipe left or right to switch layouts (\(safeIndex + 1) of \(variants.count))."
+                        : "Tap an ingredient or the output to inspect it.",
+                    symbol: activeVariant.isCookingLayout ? "flame.fill" : "square.grid.3x3.fill"
+                )
 
-            if dynamicTypeSize.isAccessibilitySize {
-                verticalLayout
-            } else {
-                ViewThatFits(in: .horizontal) {
-                    horizontalLayout
-                    verticalLayout
+                if variants.count > 1 {
+                    Spacer(minLength: 4)
+                    CraftifyStatusPill(
+                        title: "\(safeIndex + 1) / \(variants.count)",
+                        symbol: "square.stack.3d.hor.right.fill"
+                    )
                 }
+            }
+
+            if variants.count > 1 {
+                TabView(selection: $selectedCraftingOption) {
+                    ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
+                        variantLayoutView(for: variant)
+                            .tag(idx)
+                    }
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: pageViewHeight)
+
+                HStack(spacing: 8) {
+                    Spacer()
+                    ForEach(variants.indices, id: \.self) { idx in
+                        Button {
+                            withAnimation(.snappy) {
+                                selectedCraftingOption = idx
+                            }
+                        } label: {
+                            Capsule()
+                                .fill(idx == safeIndex ? accent : Color.primary.opacity(0.18))
+                                .frame(width: idx == safeIndex ? 20 : 7, height: 7)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Layout \(idx + 1) of \(variants.count)")
+                    }
+                    Spacer()
+                }
+            } else {
+                variantLayoutView(for: activeVariant)
+            }
+
+            if let imageRemark = activeVariant.imageremark ?? recipe.imageremark,
+               !imageRemark.isEmpty {
+                Divider()
+                    .overlay(Color.primary.opacity(0.08))
+
+                requiredUtilityFooter(
+                    imageRemark: imageRemark,
+                    remarks: activeVariant.remarks ?? recipe.remarks
+                )
+            } else if let remarks = activeVariant.remarks ?? recipe.remarks,
+                      !remarks.isEmpty {
+                Divider()
+                    .overlay(Color.primary.opacity(0.08))
+
+                Text(remarks)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(20)
         .craftifyCard(cornerRadius: 24)
     }
 
-    private var horizontalLayout: some View {
+    @ViewBuilder
+    private func variantLayoutView(for variant: CraftingVariant) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            verticalLayout(for: variant)
+        } else {
+            ViewThatFits(in: .horizontal) {
+                horizontalLayout(for: variant)
+                verticalLayout(for: variant)
+            }
+        }
+    }
+
+    private func horizontalLayout(for variant: CraftingVariant) -> some View {
         HStack(spacing: horizontalSizeClass == .regular ? 28 : 20) {
-            craftingGrid
+            craftingGrid(for: variant)
             Image(systemName: "arrow.right")
                 .font(.title.bold())
                 .foregroundStyle(accent)
                 .accessibilityHidden(true)
-            outputTile
+            outputTile(output: variant.output)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private var verticalLayout: some View {
+    private func verticalLayout(for variant: CraftingVariant) -> some View {
         VStack(spacing: 15) {
-            craftingGrid
+            craftingGrid(for: variant)
             Image(systemName: "arrow.down")
                 .font(.title2.bold())
                 .foregroundStyle(accent)
                 .accessibilityHidden(true)
-            outputTile
+            outputTile(output: variant.output)
         }
         .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder
-    private var craftingGrid: some View {
-        if recipe.imageremark == "Furnace" {
+    private func craftingGrid(for variant: CraftingVariant) -> some View {
+        let normalized = variant.normalizedIngredients
+        if variant.isCookingLayout {
             FurnaceGridView(
-                ingredients: ingredients,
+                ingredients: normalized,
                 selectedItem: $selectedItem,
                 selectedDetail: $selectedDetail,
                 cellSize: cellSize
             )
         } else {
             DefaultGridView(
-                ingredients: ingredients,
+                ingredients: normalized,
                 selectedItem: $selectedItem,
                 selectedDetail: $selectedDetail,
                 cellSize: cellSize
@@ -426,7 +442,7 @@ private struct CraftingRecipeCard: View {
         }
     }
 
-    private var outputTile: some View {
+    private func outputTile(output: Int) -> some View {
         Button {
             selectedDetail = recipe.name
             selectedItem = .output
@@ -457,6 +473,52 @@ private struct CraftingRecipeCard: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Output: \(recipe.name), quantity \(output)")
         .accessibilityHint("Shows output details")
+    }
+
+    private func requiredUtilityFooter(imageRemark: String, remarks: String?) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: "hammer.fill")
+                    .font(.caption.bold())
+                    .foregroundStyle(accent)
+                Text("REQUIRED CRAFTING UTILITY")
+                    .font(.caption.bold())
+                    .tracking(0.8)
+                    .foregroundStyle(accent)
+            }
+
+            HStack(alignment: .center, spacing: 14) {
+                CraftImage(key: imageRemark)
+                    .scaledToFit()
+                    .frame(width: 54, height: 54)
+                    .padding(6)
+                    .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(imageRemark)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text("Use this utility for the crafting layout shown above.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    if let remarks, !remarks.isEmpty {
+                        Text(remarks)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(accent)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.top, 2)
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(12)
+            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Required Crafting Utility: \(imageRemark)")
     }
 }
 
@@ -559,104 +621,6 @@ struct IngredientDetailPopup: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-}
-
-@MainActor
-struct RemarkAndCategoryView: View {
-    let recipe: Recipe
-    @Environment(\.craftifyAccentColor) private var accent
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var isUtilityExpanded = false
-
-    var body: some View {
-        if recipe.imageremark?.isEmpty == false || recipe.remarks?.isEmpty == false {
-            VStack(alignment: .leading, spacing: 15) {
-                CraftifySectionHeader(
-                    title: "Crafting Notes",
-                    detail: "Extra context for this recipe.",
-                    symbol: "lightbulb.fill"
-                )
-
-                if let imageRemark = recipe.imageremark, !imageRemark.isEmpty {
-                    DisclosureGroup(isExpanded: $isUtilityExpanded) {
-                        Group {
-                            if dynamicTypeSize.isAccessibilitySize {
-                                VStack(alignment: .leading, spacing: 12) {
-                                    utilityImage(imageRemark)
-                                    utilityCopy(imageRemark)
-                                }
-                            } else {
-                                HStack(alignment: .top, spacing: 14) {
-                                    utilityImage(imageRemark)
-                                    utilityCopy(imageRemark)
-                                }
-                            }
-                        }
-                        .padding(.top, 12)
-                    } label: {
-                        HStack(spacing: 13) {
-                            Image(systemName: "hammer.fill")
-                                .font(.headline)
-                                .foregroundStyle(accent)
-                                .frame(width: 40, height: 40)
-                                .background(accent.opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text("Required Crafting Utility")
-                                    .font(.headline)
-                                    .foregroundStyle(.primary)
-                                Text(isUtilityExpanded ? "Hide utility details" : "Show utility details")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
-                    .tint(accent)
-                    .onChange(of: isUtilityExpanded) { _, _ in HapticFeedback.selection() }
-                    .accessibilityHint("Shows the required utility and crafting notes")
-                }
-
-                if recipe.imageremark?.isEmpty != false,
-                   let remarks = recipe.remarks,
-                   !remarks.isEmpty {
-                    Text(remarks)
-                        .font(.body)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .padding(18)
-            .craftifyCard(cornerRadius: 22)
-        }
-    }
-
-    private func utilityImage(_ imageRemark: String) -> some View {
-        CraftImage(key: imageRemark)
-            .scaledToFit()
-            .frame(width: 64, height: 64)
-            .padding(7)
-            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .accessibilityHidden(true)
-    }
-
-    private func utilityCopy(_ imageRemark: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(imageRemark)
-                .font(.headline)
-            Text("Use this utility for the crafting layout shown above.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if let remarks = recipe.remarks, !remarks.isEmpty {
-                Text(remarks)
-                    .font(.body)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 4)
-            }
         }
     }
 }

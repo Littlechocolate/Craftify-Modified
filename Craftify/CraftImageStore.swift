@@ -280,17 +280,11 @@ final class CraftImageStore: ObservableObject {
         for recipe in recipes {
             insert(recipe.image)
             insert(recipe.imageremark)
-
-            let ingredientSets = [
-                recipe.ingredients,
-                recipe.alternateIngredients ?? [],
-                recipe.alternateIngredients1 ?? [],
-                recipe.alternateIngredients2 ?? [],
-                recipe.alternateIngredients3 ?? []
-            ]
-
-            for ingredientSet in ingredientSets {
-                ingredientSet.forEach { insert($0) }
+            for utility in recipe.craftingUtilities {
+                insert(utility)
+            }
+            for ing in recipe.allIngredientNames {
+                insert(ing)
             }
         }
 

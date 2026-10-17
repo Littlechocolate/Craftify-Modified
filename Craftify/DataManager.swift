@@ -150,13 +150,13 @@ final class DataManager: ObservableObject {
     func reloadRecipesFromActiveVersion() {
         let loaded = RecipeVersionManager.shared.loadActiveRecipes()
         if !loaded.isEmpty {
-            self.recipes = loaded.sorted { $0.name < $1.name }
+            self.recipes = Recipe.mergedByItemName(loaded)
             self.lastUpdated = Date()
             self.syncRecentSearches()
             self.seedKnownRecipeIDsIfNeeded(from: self.recipes)
             self.imageStore.prefetch(recipes: self.recipes)
         } else if let cached = loadRecipesFromLocalCache(), !cached.isEmpty {
-            self.recipes = cached.sorted { $0.name < $1.name }
+            self.recipes = Recipe.mergedByItemName(cached)
             self.lastUpdated = Date()
             self.syncRecentSearches()
             self.seedKnownRecipeIDsIfNeeded(from: self.recipes)

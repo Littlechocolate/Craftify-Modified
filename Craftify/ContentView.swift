@@ -264,7 +264,6 @@ struct RecipeListView: View {
     @Binding var recommendedRecipes: [Recipe]
     @Binding var isCraftifyPicksExpanded: Bool
     let filteredRecipes: [String: [Recipe]]
-    @State private var activeIndexLetter: String?
 
     private static let alphabet: [String] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
 
@@ -276,8 +275,12 @@ struct RecipeListView: View {
         Set(filteredRecipes.keys)
     }
 
+    private var isSingleColumn: Bool {
+        horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize
+    }
+
     private var recipeColumns: [GridItem] {
-        if horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize {
+        if isSingleColumn {
             return [GridItem(.flexible())]
         }
         return CraftifyLayout.adaptiveColumns(
@@ -307,7 +310,7 @@ struct RecipeListView: View {
                         }
                         .craftifyContentWidth()
                         .padding(.leading, CraftifyLayout.pagePadding(for: horizontalSizeClass))
-                        .padding(.trailing, CraftifyLayout.pagePadding(for: horizontalSizeClass) + 22)
+                        .padding(.trailing, CraftifyLayout.pagePadding(for: horizontalSizeClass) + 26)
                         .padding(.top, 8)
                         .padding(.bottom, 32)
                     }
@@ -316,16 +319,17 @@ struct RecipeListView: View {
                         RecipeAlphabetIndexBar(
                             alphabet: Self.alphabet,
                             availableLetters: availableLettersSet,
-                            activeLetter: $activeIndexLetter,
                             accent: accent
                         ) { selectedLetter in
                             if let target = resolveScrollTarget(for: selectedLetter) {
-                                withAnimation(.snappy(duration: 0.18)) {
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
                                     proxy.scrollTo(target, anchor: .top)
                                 }
                             }
                         }
-                        .padding(.trailing, 4)
+                        .padding(.trailing, 3)
                         .padding(.vertical, 8)
                     }
                 }
@@ -369,23 +373,34 @@ struct RecipeListView: View {
         }
     }
 
+    @ViewBuilder
     private func recipeSection(_ letter: String) -> some View {
         let items = filteredRecipes[letter] ?? []
-        return VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(letter)
                 .font(.title2.bold())
                 .foregroundStyle(accent)
                 .accessibilityAddTraits(.isHeader)
 
-            LazyVGrid(columns: recipeColumns, alignment: .leading, spacing: 12) {
-                ForEach(items) { recipe in
-                    NavigationLink(value: recipe) {
-                        RecipeCell(recipe: recipe, isCraftifyPick: false)
+            if isSingleColumn {
+                VStack(spacing: 12) {
+                    ForEach(items) { recipe in
+                        NavigationLink(value: recipe) {
+                            RecipeCell(recipe: recipe, isCraftifyPick: false)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                }
+            } else {
+                LazyVGrid(columns: recipeColumns, alignment: .leading, spacing: 12) {
+                    ForEach(items) { recipe in
+                        NavigationLink(value: recipe) {
+                            RecipeCell(recipe: recipe, isCraftifyPick: false)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .id("\(letter)-\(items.count)")
         }
     }
 }
@@ -394,9 +409,10 @@ struct RecipeListView: View {
 struct RecipeAlphabetIndexBar: View {
     let alphabet: [String]
     let availableLetters: Set<String>
-    @Binding var activeLetter: String?
     let accent: Color
     let onSelectLetter: (String) -> Void
+
+    @State private var activeLetter: String?
 
     var body: some View {
         GeometryReader { geo in
@@ -445,9 +461,10 @@ struct RecipeAlphabetIndexBar: View {
                 Capsule()
                     .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
             )
+            .padding(.leading, 6)
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
                     .onChanged { value in
                         let usableHeight = max(barContentHeight - 12, 1)
                         let y = value.location.y - 6
@@ -466,7 +483,7 @@ struct RecipeAlphabetIndexBar: View {
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
-        .frame(width: 24)
+        .frame(width: 28)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Alphabetical recipe index, A to Z")
     }
@@ -512,6 +529,9 @@ struct RecipeCell: View {
                         .foregroundStyle(accent)
                         .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
                 }
+                if !recipe.craftingUtilities.isEmpty {
+                    craftingUtilityIconsRow(iconSize: 20)
+                }
             }
             Spacer(minLength: 4)
             Image(systemName: "chevron.right")
@@ -543,11 +563,31 @@ struct RecipeCell: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                if !recipe.craftingUtilities.isEmpty {
+                    craftingUtilityIconsRow(iconSize: 18)
+                }
             }
             .padding(.horizontal, 12)
             .padding(.bottom, 12)
         }
         .frame(width: dynamicTypeSize.isAccessibilitySize ? 280 : (horizontalSizeClass == .regular ? 220 : 188))
+    }
+
+    private func craftingUtilityIconsRow(iconSize: CGFloat) -> some View {
+        HStack(spacing: 5) {
+            ForEach(recipe.craftingUtilities, id: \.self) { utility in
+                CraftImage(key: utility)
+                    .scaledToFit()
+                    .frame(width: iconSize, height: iconSize)
+                    .padding(3)
+                    .background(
+                        accent.opacity(0.08),
+                        in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    )
+            }
+        }
+        .padding(.top, 1)
+        .accessibilityHidden(true)
     }
 
     private func recipeImage(size: CGFloat) -> some View {

@@ -244,7 +244,7 @@ final class RecipeExtractorService: ObservableObject {
             }
         }
 
-        recipes.sort { $0.name < $1.name }
+        recipes = Recipe.mergedByItemName(recipes)
         let categories = Array(Set(recipes.map(\.category))).sorted()
 
         let package = RecipePackage(

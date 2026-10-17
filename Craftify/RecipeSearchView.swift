@@ -32,6 +32,8 @@ struct RecipeSearchView: View {
         }
     }
 
+    private static let alphabet: [String] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
+
     private var trimmedQuery: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
@@ -51,23 +53,32 @@ struct RecipeSearchView: View {
                 return strictSubstringMatch(recipe.name, query: query)
             case .all:
                 return strictSubstringMatch(recipe.name, query: query)
-                    || recipe.ingredients.contains { strictSubstringMatch($0, query: query) }
+                    || recipe.allIngredientNames.contains { strictSubstringMatch($0, query: query) }
             case .ingredients:
-                return recipe.ingredients.contains { strictSubstringMatch($0, query: query) }
+                return recipe.allIngredientNames.contains { strictSubstringMatch($0, query: query) }
             }
         }
         .sorted { lhs, rhs in
-            let lowerQuery = query.lowercased()
-            let lhsName = lhs.name.lowercased()
-            let rhsName = rhs.name.lowercased()
-            if (lhsName == lowerQuery) != (rhsName == lowerQuery) {
-                return lhsName == lowerQuery
-            }
-            if lhsName.hasPrefix(lowerQuery) != rhsName.hasPrefix(lowerQuery) {
-                return lhsName.hasPrefix(lowerQuery)
-            }
-            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+            lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    private var groupedMatchingRecipes: [String: [Recipe]] {
+        Dictionary(grouping: matchingRecipes) {
+            String($0.name.prefix(1)).uppercased()
+        }
+    }
+
+    private var sortedAvailableLetters: [String] {
+        groupedMatchingRecipes.keys.sorted()
+    }
+
+    private var availableLettersSet: Set<String> {
+        Set(groupedMatchingRecipes.keys)
+    }
+
+    private var isSingleColumn: Bool {
+        horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize
     }
 
     private var recentSearchRecipes: [Recipe] {
@@ -92,30 +103,56 @@ struct RecipeSearchView: View {
 
     var body: some View {
         NavigationStack(path: $navigationPath) {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 24) {
-                    if trimmedQuery.isEmpty && !isSearchActive {
-                        inactiveContent
-                    } else if trimmedQuery.isEmpty {
-                        searchState(
-                            symbol: "text.cursor",
-                            title: "Start Searching",
-                            detail: "Enter an item or recipe name to find matching recipes."
-                        )
-                    } else if matchingRecipes.isEmpty {
-                        searchState(
-                            symbol: "magnifyingglass",
-                            title: "No Recipes Found",
-                            detail: "No recipes matched \"\(trimmedQuery)\"."
-                        )
-                    } else {
-                        resultsContent
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 24) {
+                        if trimmedQuery.isEmpty && !isSearchActive {
+                            inactiveContent
+                        } else if trimmedQuery.isEmpty {
+                            searchState(
+                                symbol: "text.cursor",
+                                title: "Start Searching",
+                                detail: "Enter an item or recipe name to find matching recipes."
+                            )
+                        } else if matchingRecipes.isEmpty {
+                            searchState(
+                                symbol: "magnifyingglass",
+                                title: "No Recipes Found",
+                                detail: "No recipes matched \"\(trimmedQuery)\"."
+                            )
+                        } else {
+                            resultsContent
+                        }
+                    }
+                    .craftifyContentWidth()
+                    .padding(.leading, CraftifyLayout.pagePadding(for: horizontalSizeClass))
+                    .padding(
+                        .trailing,
+                        CraftifyLayout.pagePadding(for: horizontalSizeClass) + (matchingRecipes.isEmpty ? 0 : 26)
+                    )
+                    .padding(.top, 12)
+                    .padding(.bottom, 34)
+                }
+                .scrollIndicators(.hidden)
+                .overlay(alignment: .trailing) {
+                    if !matchingRecipes.isEmpty {
+                        RecipeAlphabetIndexBar(
+                            alphabet: Self.alphabet,
+                            availableLetters: availableLettersSet,
+                            accent: accent
+                        ) { selectedLetter in
+                            if let target = resolveScrollTarget(for: selectedLetter) {
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    proxy.scrollTo(target, anchor: .top)
+                                }
+                            }
+                        }
+                        .padding(.trailing, 3)
+                        .padding(.vertical, 8)
                     }
                 }
-                .craftifyContentWidth()
-                .padding(.horizontal, CraftifyLayout.pagePadding(for: horizontalSizeClass))
-                .padding(.top, 12)
-                .padding(.bottom, 34)
             }
             .navigationTitle("Search")
             .navigationBarTitleDisplayMode(.large)
@@ -164,6 +201,18 @@ struct RecipeSearchView: View {
                     }
             }
         }
+    }
+
+    private func resolveScrollTarget(for letter: String) -> String? {
+        let sorted = sortedAvailableLetters
+        guard !sorted.isEmpty else { return nil }
+        if availableLettersSet.contains(letter) {
+            return letter
+        }
+        if let next = sorted.first(where: { $0 >= letter }) {
+            return next
+        }
+        return sorted.last
     }
 
     private var inactiveContent: some View {
@@ -223,15 +272,36 @@ struct RecipeSearchView: View {
                 )
             }
 
-            LazyVGrid(columns: resultColumns, alignment: .leading, spacing: 12) {
-                ForEach(matchingRecipes) { recipe in
-                    NavigationLink(value: recipe) {
-                        RecipeCell(recipe: recipe, isCraftifyPick: false)
+            ForEach(sortedAvailableLetters, id: \.self) { letter in
+                let items = groupedMatchingRecipes[letter] ?? []
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(letter)
+                        .font(.title2.bold())
+                        .foregroundStyle(accent)
+                        .accessibilityAddTraits(.isHeader)
+
+                    if isSingleColumn {
+                        VStack(spacing: 12) {
+                            ForEach(items) { recipe in
+                                NavigationLink(value: recipe) {
+                                    RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    } else {
+                        LazyVGrid(columns: resultColumns, alignment: .leading, spacing: 12) {
+                            ForEach(items) { recipe in
+                                NavigationLink(value: recipe) {
+                                    RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
+                .id(letter)
             }
-            .id("\(trimmedQuery.lowercased())-\(searchFilter.rawValue)")
         }
     }
 
@@ -271,7 +341,7 @@ struct RecentSearchItem: View {
                 .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(recipe.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
@@ -279,6 +349,21 @@ struct RecentSearchItem: View {
                 Text(recipe.category)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if !recipe.craftingUtilities.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(recipe.craftingUtilities, id: \.self) { utility in
+                            CraftImage(key: utility)
+                                .scaledToFit()
+                                .frame(width: 16, height: 16)
+                                .padding(2)
+                                .background(
+                                    accent.opacity(0.08),
+                                    in: RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                )
+                        }
+                    }
+                    .accessibilityHidden(true)
+                }
             }
             Spacer(minLength: 3)
             Image(systemName: "chevron.right")
