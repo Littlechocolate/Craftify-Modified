@@ -1162,19 +1162,27 @@ class IsometricRenderer:
             if ent_bed is not None and ent_bed.shape[0] >= 44 and ent_bed.shape[1] >= 44:
                 head_top = ent_bed[6:22, 6:22]
                 foot_top = ent_bed[28:44, 6:22]
-                head_end = ent_bed[0:6, 6:22]
-                foot_end = ent_bed[22:28, 6:22]
-                head_side = np.rot90(ent_bed[6:22, 0:6], k=1)
-                foot_side = np.rot90(ent_bed[28:44, 0:6], k=1)
-                leg_patch = ent_bed[3:6, 53:56] if ent_bed.shape[1] >= 56 else ent_bed[6:9, 0:3]
+                head_end = np.rot90(ent_bed[0:6, 6:22], k=2)
+                foot_end = np.flipud(ent_bed[22:28, 22:38]) if ent_bed.shape[1] >= 38 else np.flipud(ent_bed[22:28, 6:22])
+                head_west = np.rot90(ent_bed[6:22, 0:6], k=1)
+                head_east = np.rot90(ent_bed[6:22, 22:28], k=3)
+                foot_west = np.rot90(ent_bed[28:44, 0:6], k=1)
+                foot_east = np.rot90(ent_bed[28:44, 22:28], k=3)
+                leg_outer = ent_bed[3:6, 53:56] if ent_bed.shape[1] >= 56 else ent_bed[6:9, 0:3]
+                leg_pad_r = np.fliplr(ent_bed[9:12, 56:59]) if ent_bed.shape[1] >= 59 else leg_outer
+                leg_pad_l = ent_bed[9:12, 56:59] if ent_bed.shape[1] >= 59 else leg_outer
 
                 self.texture_cache[(f"__bed_htop_{c_name}", True)] = head_top
                 self.texture_cache[(f"__bed_ftop_{c_name}", True)] = foot_top
                 self.texture_cache[(f"__bed_hend_{c_name}", True)] = head_end
                 self.texture_cache[(f"__bed_fend_{c_name}", True)] = foot_end
-                self.texture_cache[(f"__bed_hside_{c_name}", True)] = head_side
-                self.texture_cache[(f"__bed_fside_{c_name}", True)] = foot_side
-                self.texture_cache[(f"__bed_leg_{c_name}", True)] = leg_patch
+                self.texture_cache[(f"__bed_hwest_{c_name}", True)] = head_west
+                self.texture_cache[(f"__bed_heast_{c_name}", True)] = head_east
+                self.texture_cache[(f"__bed_fwest_{c_name}", True)] = foot_west
+                self.texture_cache[(f"__bed_feast_{c_name}", True)] = foot_east
+                self.texture_cache[(f"__bed_leg_out_{c_name}", True)] = leg_outer
+                self.texture_cache[(f"__bed_leg_padr_{c_name}", True)] = leg_pad_r
+                self.texture_cache[(f"__bed_leg_padl_{c_name}", True)] = leg_pad_l
 
                 elems = [
                     {
@@ -1184,8 +1192,8 @@ class IsometricRenderer:
                             "down":  {"texture": f"__bed_htop_{c_name}",  "uv": [0, 0, 16, 16]},
                             "north": {"texture": f"__bed_hend_{c_name}",  "uv": [0, 0, 16, 16]},
                             "south": {"texture": f"__bed_hend_{c_name}",  "uv": [0, 0, 16, 16]},
-                            "west":  {"texture": f"__bed_hside_{c_name}", "uv": [0, 0, 16, 16]},
-                            "east":  {"texture": f"__bed_hside_{c_name}", "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_hwest_{c_name}", "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_heast_{c_name}", "uv": [0, 0, 16, 16]},
                         }
                     },
                     {
@@ -1195,19 +1203,55 @@ class IsometricRenderer:
                             "down":  {"texture": f"__bed_ftop_{c_name}",  "uv": [0, 0, 16, 16]},
                             "north": {"texture": f"__bed_fend_{c_name}",  "uv": [0, 0, 16, 16]},
                             "south": {"texture": f"__bed_fend_{c_name}",  "uv": [0, 0, 16, 16]},
-                            "west":  {"texture": f"__bed_fside_{c_name}", "uv": [0, 0, 16, 16]},
-                            "east":  {"texture": f"__bed_fside_{c_name}", "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_fwest_{c_name}", "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_feast_{c_name}", "uv": [0, 0, 16, 16]},
+                        }
+                    },
+                    {
+                        "from": [0, 0, -8], "to": [3, 3, -5],
+                        "faces": {
+                            "up":    {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "down":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "north": {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "south": {"texture": f"__bed_leg_padl_{c_name}", "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_leg_padl_{c_name}", "uv": [0, 0, 16, 16]},
+                        }
+                    },
+                    {
+                        "from": [13, 0, -8], "to": [16, 3, -5],
+                        "faces": {
+                            "up":    {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "down":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "north": {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "south": {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_leg_padl_{c_name}", "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                        }
+                    },
+                    {
+                        "from": [0, 0, 21], "to": [3, 3, 24],
+                        "faces": {
+                            "up":    {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "down":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "north": {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "south": {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_leg_padl_{c_name}", "uv": [0, 0, 16, 16]},
+                        }
+                    },
+                    {
+                        "from": [13, 0, 21], "to": [16, 3, 24],
+                        "faces": {
+                            "up":    {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "down":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
+                            "north": {"texture": f"__bed_leg_padl_{c_name}", "uv": [0, 0, 16, 16]},
+                            "south": {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "west":  {"texture": f"__bed_leg_padr_{c_name}", "uv": [0, 0, 16, 16]},
+                            "east":  {"texture": f"__bed_leg_out_{c_name}",  "uv": [0, 0, 16, 16]},
                         }
                     },
                 ]
-                for lx, lz in ((0, -8), (13, -8), (0, 21), (13, 21)):
-                    elems.append({
-                        "from": [lx, 0, lz], "to": [lx + 3, 3, lz + 3],
-                        "faces": {
-                            f: {"texture": f"__bed_leg_{c_name}", "uv": [0, 0, 16, 16]}
-                            for f in ("up", "down", "north", "south", "west", "east")
-                        }
-                    })
                 tf = custom_gui_tf or {"rotation": [30, 135, 0], "translation": [0, 2, 0], "scale": [0.50, 0.50, 0.50]}
                 self.render_elements_to_buffers(elems, {}, tf, [], color_buf, depth_buf)
                 return None

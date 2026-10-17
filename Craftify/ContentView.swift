@@ -264,6 +264,17 @@ struct RecipeListView: View {
     @Binding var recommendedRecipes: [Recipe]
     @Binding var isCraftifyPicksExpanded: Bool
     let filteredRecipes: [String: [Recipe]]
+    @State private var activeIndexLetter: String?
+
+    private static let alphabet: [String] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
+
+    private var sortedAvailableLetters: [String] {
+        filteredRecipes.keys.sorted()
+    }
+
+    private var availableLettersSet: Set<String> {
+        Set(filteredRecipes.keys)
+    }
 
     private var recipeColumns: [GridItem] {
         if horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize {
@@ -282,24 +293,56 @@ struct RecipeListView: View {
             if dataManager.recipes.isEmpty {
                 EmptyRecipeView()
             } else {
-                ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
-                        if !recommendedRecipes.isEmpty {
-                            picksSection
-                        }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        LazyVStack(alignment: .leading, spacing: 24) {
+                            if !recommendedRecipes.isEmpty {
+                                picksSection
+                            }
 
-                        ForEach(filteredRecipes.keys.sorted(), id: \.self) { letter in
-                            recipeSection(letter)
+                            ForEach(sortedAvailableLetters, id: \.self) { letter in
+                                recipeSection(letter)
+                                    .id(letter)
+                            }
                         }
+                        .craftifyContentWidth()
+                        .padding(.leading, CraftifyLayout.pagePadding(for: horizontalSizeClass))
+                        .padding(.trailing, CraftifyLayout.pagePadding(for: horizontalSizeClass) + 22)
+                        .padding(.top, 8)
+                        .padding(.bottom, 32)
                     }
-                    .craftifyContentWidth()
-                    .padding(.horizontal, CraftifyLayout.pagePadding(for: horizontalSizeClass))
-                    .padding(.top, 8)
-                    .padding(.bottom, 32)
+                    .scrollIndicators(.hidden)
+                    .overlay(alignment: .trailing) {
+                        RecipeAlphabetIndexBar(
+                            alphabet: Self.alphabet,
+                            availableLetters: availableLettersSet,
+                            activeLetter: $activeIndexLetter,
+                            accent: accent
+                        ) { selectedLetter in
+                            if let target = resolveScrollTarget(for: selectedLetter) {
+                                withAnimation(.snappy(duration: 0.18)) {
+                                    proxy.scrollTo(target, anchor: .top)
+                                }
+                            }
+                        }
+                        .padding(.trailing, 4)
+                        .padding(.vertical, 8)
+                    }
                 }
-                .scrollIndicators(.hidden)
             }
         }
+    }
+
+    private func resolveScrollTarget(for letter: String) -> String? {
+        let sorted = sortedAvailableLetters
+        guard !sorted.isEmpty else { return nil }
+        if availableLettersSet.contains(letter) {
+            return letter
+        }
+        if let next = sorted.first(where: { $0 >= letter }) {
+            return next
+        }
+        return sorted.last
     }
 
     private var picksSection: some View {
@@ -327,21 +370,105 @@ struct RecipeListView: View {
     }
 
     private func recipeSection(_ letter: String) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        let items = filteredRecipes[letter] ?? []
+        return VStack(alignment: .leading, spacing: 10) {
             Text(letter)
                 .font(.title2.bold())
                 .foregroundStyle(accent)
                 .accessibilityAddTraits(.isHeader)
 
             LazyVGrid(columns: recipeColumns, alignment: .leading, spacing: 12) {
-                ForEach(filteredRecipes[letter] ?? []) { recipe in
+                ForEach(items) { recipe in
                     NavigationLink(value: recipe) {
                         RecipeCell(recipe: recipe, isCraftifyPick: false)
                     }
                     .buttonStyle(.plain)
                 }
             }
+            .id("\(letter)-\(items.count)")
         }
+    }
+}
+
+@MainActor
+struct RecipeAlphabetIndexBar: View {
+    let alphabet: [String]
+    let availableLetters: Set<String>
+    @Binding var activeLetter: String?
+    let accent: Color
+    let onSelectLetter: (String) -> Void
+
+    var body: some View {
+        GeometryReader { geo in
+            let totalHeight = max(geo.size.height, 260)
+            let showDots = totalHeight >= 470
+            let letterHeight: CGFloat = showDots ? 12 : max(9, min(14, (totalHeight - 16) / CGFloat(alphabet.count)))
+            let dotHeight: CGFloat = 5
+            let barContentHeight = CGFloat(alphabet.count) * letterHeight
+                + (showDots ? CGFloat(alphabet.count - 1) * dotHeight : 0)
+                + 12
+
+            VStack(spacing: 0) {
+                ForEach(Array(alphabet.enumerated()), id: \.element) { idx, letter in
+                    let isAvailable = availableLetters.contains(letter)
+                    let isActive = activeLetter == letter
+
+                    Text(letter)
+                        .font(.system(size: showDots ? 10 : 9.5, weight: isActive ? .heavy : (isAvailable ? .bold : .medium), design: .rounded))
+                        .foregroundStyle(
+                            isActive
+                                ? Color.white
+                                : (isAvailable ? accent : Color.secondary.opacity(0.4))
+                        )
+                        .frame(width: 18, height: letterHeight)
+                        .background {
+                            if isActive {
+                                Circle()
+                                    .fill(accent)
+                                    .frame(width: 15, height: 15)
+                            }
+                        }
+
+                    if showDots && idx < alphabet.count - 1 {
+                        Text("·")
+                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                            .foregroundStyle(Color.secondary.opacity(0.45))
+                            .frame(width: 18, height: dotHeight)
+                    }
+                }
+            }
+            .padding(.vertical, 6)
+            .padding(.horizontal, 2)
+            .frame(width: 22, height: barContentHeight)
+            .background(.ultraThinMaterial, in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            )
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let usableHeight = max(barContentHeight - 12, 1)
+                        let y = value.location.y - 6
+                        let ratio = min(max(y / usableHeight, 0), 0.9999)
+                        let index = Int(ratio * CGFloat(alphabet.count))
+                        let letter = alphabet[index]
+                        if activeLetter != letter {
+                            activeLetter = letter
+                            HapticFeedback.selection()
+                            onSelectLetter(letter)
+                        }
+                    }
+                    .onEnded { _ in
+                        activeLetter = nil
+                    }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+        }
+        .frame(width: 24)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Alphabetical recipe index, A to Z")
     }
 }
 

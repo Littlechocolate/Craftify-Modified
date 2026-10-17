@@ -81,14 +81,22 @@ final class RecipeVersionManager: ObservableObject {
 
     // MARK: - Bundled Defaults
 
+    private func bundledStampKey(for version: String) -> String {
+        "craftify.bundledRecipeStamp.\(version)"
+    }
+
     private func seedBundledVersionsIfNeeded() {
         // Find all bundled .recipe files
         let bundleRecipes = Bundle.main.urls(forResourcesWithExtension: "recipe", subdirectory: nil) ?? []
         for url in bundleRecipes {
             let verName = url.deletingPathExtension().lastPathComponent
+            let bundleFileSize = (try? fileManager.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            let storedStamp = defaults.string(forKey: bundledStampKey(for: verName)) ?? ""
             let existing = installedVersions.first(where: { $0.version == verName })
             let needsIconUpgrade = existing != nil && existing!.isDefault && (
-                existing!.iconCount == 0 || !CraftImageStore.shared.hasVersionIcons(for: verName)
+                existing!.iconCount == 0
+                || !CraftImageStore.shared.hasVersionIcons(for: verName)
+                || !storedStamp.hasPrefix("\(bundleFileSize):")
             )
             if existing == nil || needsIconUpgrade {
                 _ = importBundledRecipe(from: url, isDefault: true)
@@ -139,6 +147,7 @@ final class RecipeVersionManager: ObservableObject {
             fileName: fileName
         )
 
+        defaults.set("\(data.count):\(package.createdAt ?? "")", forKey: bundledStampKey(for: package.gameVersion))
         installedVersions.removeAll { $0.version == info.version }
         installedVersions.append(info)
         saveMetadata()

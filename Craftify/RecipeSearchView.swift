@@ -14,22 +14,59 @@ struct RecipeSearchView: View {
     @Environment(\.craftifyAccentColor) private var accent
     @State private var searchText = ""
     @State private var isSearchActive = false
-    @State private var filteredRecipes: [String: [Recipe]] = [:]
     @State private var navigationPath = NavigationPath()
-    @State private var searchFilter: SearchFilter = .all
+    @State private var searchFilter: SearchFilter = .names
 
     enum SearchFilter: String, CaseIterable, Identifiable {
-        case all = "Names & Ingredients"
         case names = "Recipe Names"
+        case all = "Names & Ingredients"
         case ingredients = "Ingredients"
 
         var id: Self { self }
         var symbol: String {
             switch self {
-            case .all: "text.magnifyingglass"
             case .names: "character.cursor.ibeam"
+            case .all: "text.magnifyingglass"
             case .ingredients: "cube.fill"
             }
+        }
+    }
+
+    private var trimmedQuery: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func strictSubstringMatch(_ target: String, query: String) -> Bool {
+        guard !query.isEmpty else { return false }
+        return target.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
+    }
+
+    private var matchingRecipes: [Recipe] {
+        let query = trimmedQuery
+        guard !query.isEmpty else { return [] }
+
+        return dataManager.recipes.filter { recipe in
+            switch searchFilter {
+            case .names:
+                return strictSubstringMatch(recipe.name, query: query)
+            case .all:
+                return strictSubstringMatch(recipe.name, query: query)
+                    || recipe.ingredients.contains { strictSubstringMatch($0, query: query) }
+            case .ingredients:
+                return recipe.ingredients.contains { strictSubstringMatch($0, query: query) }
+            }
+        }
+        .sorted { lhs, rhs in
+            let lowerQuery = query.lowercased()
+            let lhsName = lhs.name.lowercased()
+            let rhsName = rhs.name.lowercased()
+            if (lhsName == lowerQuery) != (rhsName == lowerQuery) {
+                return lhsName == lowerQuery
+            }
+            if lhsName.hasPrefix(lowerQuery) != rhsName.hasPrefix(lowerQuery) {
+                return lhsName.hasPrefix(lowerQuery)
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
     }
 
@@ -57,19 +94,19 @@ struct RecipeSearchView: View {
         NavigationStack(path: $navigationPath) {
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 24) {
-                    if searchText.isEmpty && !isSearchActive {
+                    if trimmedQuery.isEmpty && !isSearchActive {
                         inactiveContent
-                    } else if searchText.isEmpty {
+                    } else if trimmedQuery.isEmpty {
                         searchState(
                             symbol: "text.cursor",
                             title: "Start Searching",
-                            detail: "Enter a recipe name or an ingredient you already have."
+                            detail: "Enter an item or recipe name to find matching recipes."
                         )
-                    } else if filteredRecipes.isEmpty {
+                    } else if matchingRecipes.isEmpty {
                         searchState(
                             symbol: "magnifyingglass",
                             title: "No Recipes Found",
-                            detail: "Try another term or change where Craftify searches."
+                            detail: "No recipes matched \"\(trimmedQuery)\"."
                         )
                     } else {
                         resultsContent
@@ -86,15 +123,16 @@ struct RecipeSearchView: View {
                 text: $searchText,
                 isPresented: $isSearchActive,
                 placement: .navigationBarDrawer(displayMode: .always),
-                prompt: "Search recipes"
+                prompt: "Search recipes by name"
             )
+            .autocorrectionDisabled()
+            .textInputAutocapitalization(.never)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         ForEach(SearchFilter.allCases) { filter in
                             Button {
                                 searchFilter = filter
-                                updateFilteredRecipes()
                                 HapticFeedback.selection()
                             } label: {
                                 Label(filter.rawValue, systemImage: searchFilter == filter ? "checkmark" : filter.symbol)
@@ -113,16 +151,10 @@ struct RecipeSearchView: View {
                 }
             }
             .craftifyPage()
-            .onChange(of: isSearchActive) { _, active in
-                if !active { searchText = "" }
-            }
-            .onChange(of: searchText) { _, _ in updateFilteredRecipes() }
-            .onChange(of: dataManager.recipes) { _, _ in updateFilteredRecipes() }
             .onAppear {
                 dataManager.syncChests()
                 dataManager.syncRecentSearches()
                 dataManager.fetchRecipes(isManual: false)
-                updateFilteredRecipes()
             }
             .navigationDestination(for: Recipe.self) { recipe in
                 RecipeDetailView(recipe: recipe, navigationPath: $navigationPath)
@@ -180,7 +212,7 @@ struct RecipeSearchView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Search Results")
                         .font(.title2.bold())
-                    Text("Searching \(searchFilter.rawValue.lowercased())")
+                    Text("Matching \"\(trimmedQuery)\" in \(searchFilter.rawValue.lowercased())")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -191,28 +223,20 @@ struct RecipeSearchView: View {
                 )
             }
 
-            ForEach(filteredRecipes.keys.sorted(), id: \.self) { letter in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(letter)
-                        .font(.title2.bold())
-                        .foregroundStyle(accent)
-                        .accessibilityAddTraits(.isHeader)
-
-                    LazyVGrid(columns: resultColumns, alignment: .leading, spacing: 12) {
-                        ForEach(filteredRecipes[letter] ?? []) { recipe in
-                            NavigationLink(value: recipe) {
-                                RecipeCell(recipe: recipe, isCraftifyPick: false)
-                            }
-                            .buttonStyle(.plain)
-                        }
+            LazyVGrid(columns: resultColumns, alignment: .leading, spacing: 12) {
+                ForEach(matchingRecipes) { recipe in
+                    NavigationLink(value: recipe) {
+                        RecipeCell(recipe: recipe, isCraftifyPick: false)
                     }
+                    .buttonStyle(.plain)
                 }
             }
+            .id("\(trimmedQuery.lowercased())-\(searchFilter.rawValue)")
         }
     }
 
     private var resultCount: Int {
-        filteredRecipes.values.reduce(0) { $0 + $1.count }
+        matchingRecipes.count
     }
 
     private func searchState(symbol: String, title: String, detail: String) -> some View {
@@ -230,25 +254,6 @@ struct RecipeSearchView: View {
         .background { AppBackground().ignoresSafeArea() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Loading recipes")
-    }
-
-    private func updateFilteredRecipes() {
-        let matches = searchText.isEmpty ? dataManager.recipes : dataManager.recipes.filter { recipe in
-            switch searchFilter {
-            case .all:
-                recipe.name.localizedCaseInsensitiveContains(searchText)
-                    || recipe.ingredients.contains { $0.localizedCaseInsensitiveContains(searchText) }
-            case .names:
-                recipe.name.localizedCaseInsensitiveContains(searchText)
-            case .ingredients:
-                recipe.ingredients.contains { $0.localizedCaseInsensitiveContains(searchText) }
-            }
-        }
-
-        filteredRecipes = Dictionary(grouping: matches) {
-            String($0.name.prefix(1)).uppercased()
-        }
-        .mapValues { $0.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
     }
 }
 
