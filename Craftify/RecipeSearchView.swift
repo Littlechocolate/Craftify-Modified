@@ -92,20 +92,29 @@ struct RecipeSearchView: View {
         return Array(resolved.prefix(10))
     }
 
-    private var resultColumns: [GridItem] {
-        CraftifyLayout.adaptiveColumns(
-            minimum: dynamicTypeSize.isAccessibilitySize ? 300 : 320,
-            maximum: 520,
-            spacing: 14,
-            dynamicTypeSize: dynamicTypeSize
+    private static let scrollSpaceName = "CraftifySearchScrollSpace"
+
+    private var sectionsLayout: RecipeSectionsLayout {
+        RecipeSectionsLayout(
+            sortedLetters: sortedAvailableLetters,
+            groupedRecipes: groupedMatchingRecipes,
+            isSingleColumn: isSingleColumn,
+            rowHeight: RecipeRowMetrics.rowHeight(for: dynamicTypeSize)
         )
     }
 
+    @State private var measuredScrollY: CGFloat = 0
+    @State private var lastReportedOffset: CGFloat = 0
+    @State private var jumpTargetY: CGFloat?
+    @State private var viewportHeight: CGFloat = 850
+
     var body: some View {
+        let layout = sectionsLayout
+
         NavigationStack(path: $navigationPath) {
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 24) {
+                    VStack(alignment: .leading, spacing: 24) {
                         if trimmedQuery.isEmpty && !isSearchActive {
                             inactiveContent
                         } else if trimmedQuery.isEmpty {
@@ -121,7 +130,7 @@ struct RecipeSearchView: View {
                                 detail: "No recipes matched \"\(trimmedQuery)\"."
                             )
                         } else {
-                            resultsContent
+                            resultsContent(layout: layout)
                         }
                     }
                     .craftifyContentWidth()
@@ -133,22 +142,63 @@ struct RecipeSearchView: View {
                     .padding(.top, 12)
                     .padding(.bottom, 34)
                 }
+                .coordinateSpace(name: Self.scrollSpaceName)
                 .scrollIndicators(.hidden)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear {
+                                if geo.size.height > 100 {
+                                    viewportHeight = geo.size.height
+                                }
+                            }
+                            .onChange(of: geo.size.height) { _, newHeight in
+                                if newHeight > 100 {
+                                    viewportHeight = newHeight
+                                }
+                            }
+                    }
+                )
+                .onPreferenceChange(RecipeSectionsScrollOffsetKey.self) { newOffset in
+                    lastReportedOffset = newOffset
+                    if abs(newOffset - measuredScrollY) >= 48 {
+                        measuredScrollY = newOffset
+                    }
+                }
+                .onChange(of: layout.totalHeight) { _, newTotal in
+                    let maxScroll = max(0, newTotal - viewportHeight)
+                    if measuredScrollY > maxScroll {
+                        measuredScrollY = maxScroll
+                    }
+                    jumpTargetY = nil
+                }
                 .overlay(alignment: .trailing) {
                     if !matchingRecipes.isEmpty {
                         RecipeAlphabetIndexBar(
                             alphabet: Self.alphabet,
                             availableLetters: availableLettersSet,
-                            accent: accent
-                        ) { selectedLetter in
-                            if let target = resolveScrollTarget(for: selectedLetter) {
-                                var transaction = Transaction()
-                                transaction.disablesAnimations = true
-                                withTransaction(transaction) {
-                                    proxy.scrollTo(target, anchor: .top)
+                            accent: accent,
+                            onSelectLetter: { selectedLetter in
+                                if let target = resolveScrollTarget(for: selectedLetter),
+                                   let section = layout.sectionsByLetter[target] {
+                                    let clampedY = min(
+                                        section.relMinY,
+                                        max(0, layout.totalHeight - viewportHeight)
+                                    )
+                                    var transaction = Transaction()
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        jumpTargetY = clampedY
+                                        measuredScrollY = clampedY
+                                        proxy.scrollTo(target, anchor: .top)
+                                    }
                                 }
+                            },
+                            onEndScrubbing: {
+                                measuredScrollY = lastReportedOffset
+                                jumpTargetY = nil
                             }
-                        }
+                        )
                         .padding(.trailing, 3)
                         .padding(.vertical, 8)
                     }
@@ -255,56 +305,38 @@ struct RecipeSearchView: View {
         }
     }
 
-    private var resultsContent: some View {
-        Group {
-            HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Search Results")
-                        .font(.title2.bold())
-                    Text("Matching \"\(trimmedQuery)\" in \(searchFilter.rawValue.lowercased())")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                CraftifyStatusPill(
-                    title: "\(resultCount) found",
-                    symbol: "magnifyingglass"
+    @ViewBuilder
+    private func resultsContent(layout: RecipeSectionsLayout) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Search Results")
+                    .font(.title2.bold())
+                Text("Matching \"\(trimmedQuery)\" in \(searchFilter.rawValue.lowercased())")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            CraftifyStatusPill(
+                title: "\(resultCount) found",
+                symbol: "magnifyingglass"
+            )
+        }
+
+        RecipeVirtualizedSectionsView(
+            layout: layout,
+            measuredScrollY: measuredScrollY,
+            jumpTargetY: jumpTargetY,
+            viewportHeight: viewportHeight,
+            accent: accent
+        )
+        .background(
+            GeometryReader { geo in
+                Color.clear.preference(
+                    key: RecipeSectionsScrollOffsetKey.self,
+                    value: -geo.frame(in: .named(Self.scrollSpaceName)).minY
                 )
             }
-
-            ForEach(sortedAvailableLetters, id: \.self) { letter in
-                let items = groupedMatchingRecipes[letter] ?? []
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(letter)
-                        .font(.title2.bold())
-                        .foregroundStyle(accent)
-                        .accessibilityAddTraits(.isHeader)
-
-                    if isSingleColumn {
-                        LazyVStack(spacing: 12) {
-                            ForEach(items) { recipe in
-                                NavigationLink(value: recipe) {
-                                    RecipeCell(recipe: recipe, isCraftifyPick: false)
-                                        .equatable()
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    } else {
-                        LazyVGrid(columns: resultColumns, alignment: .leading, spacing: 12) {
-                            ForEach(items) { recipe in
-                                NavigationLink(value: recipe) {
-                                    RecipeCell(recipe: recipe, isCraftifyPick: false)
-                                        .equatable()
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-                }
-                .id(letter)
-            }
-        }
+        )
     }
 
     private var resultCount: Int {
