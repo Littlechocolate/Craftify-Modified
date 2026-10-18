@@ -90,7 +90,7 @@ final class CraftImageStore: ObservableObject {
         self.activeVersion = defaults.string(forKey: Self.activeVersionDefaultsKey) ?? ""
 
         prepareStorage()
-        imageCache.countLimit = 600
+        imageCache.countLimit = 3000
     }
 
     // MARK: - Per-Version Icon Isolation
@@ -478,10 +478,14 @@ final class CraftImageStore: ObservableObject {
 
 
 @MainActor
-struct CraftImage: View {
+struct CraftImage: View, Equatable {
     @ObservedObject private var store: CraftImageStore
     let key: String
     let fallbackSystemName: String
+
+    nonisolated static func == (lhs: CraftImage, rhs: CraftImage) -> Bool {
+        lhs.key == rhs.key && lhs.fallbackSystemName == rhs.fallbackSystemName
+    }
 
     init(
         key: String,
@@ -494,20 +498,15 @@ struct CraftImage: View {
     }
 
     var body: some View {
-        Group {
-            if let image = store.image(for: key, version: store.activeVersion) {
-                Image(uiImage: image)
-                    .resizable()
-                    .interpolation(.none)
-            } else {
-                Image(systemName: fallbackSystemName)
-                    .resizable()
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .task(id: "\(store.activeVersion)::\(key)") {
-            await store.load(key)
+        if let image = store.image(for: key, version: store.activeVersion) {
+            Image(uiImage: image)
+                .resizable()
+                .interpolation(.none)
+        } else {
+            Image(systemName: fallbackSystemName)
+                .resizable()
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.secondary)
         }
     }
 }

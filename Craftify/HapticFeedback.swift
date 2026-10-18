@@ -12,10 +12,16 @@ import UIKit
 /// Its app-specific name keeps call sites distinct from system haptics APIs.
 @MainActor
 enum HapticFeedback {
+    private static let selectionGenerator = UISelectionFeedbackGenerator()
+    private static let notificationGenerator = UINotificationFeedbackGenerator()
+
+    static func prepareSelection() {
+        selectionGenerator.prepare()
+    }
+
     static func selection() {
-        let generator = UISelectionFeedbackGenerator()
-        generator.prepare()
-        generator.selectionChanged()
+        selectionGenerator.selectionChanged()
+        selectionGenerator.prepare()
     }
 
     static func impact(_ style: UIImpactFeedbackGenerator.FeedbackStyle = .light) {
@@ -25,8 +31,7 @@ enum HapticFeedback {
     }
 
     static func notification(_ type: UINotificationFeedbackGenerator.FeedbackType) {
-        let generator = UINotificationFeedbackGenerator()
-        generator.prepare()
-        generator.notificationOccurred(type)
+        notificationGenerator.prepare()
+        notificationGenerator.notificationOccurred(type)
     }
 }

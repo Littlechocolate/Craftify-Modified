@@ -286,18 +286,18 @@ private struct CraftifyCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background(
-                Color(.secondarySystemGroupedBackground),
-                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            )
+            .background {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+            }
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
+                    .strokeBorder(
                         accent.opacity(contrast == .increased ? 0.42 : 0.16),
                         lineWidth: contrast == .increased ? 1.5 : 1
                     )
             }
-            .shadow(color: .black.opacity(0.055), radius: 12, y: 5)
     }
 }
 
@@ -311,16 +311,16 @@ private struct CraftifyAccentCardModifier: ViewModifier {
             .background {
                 AppBackground()
                     .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
             }
             .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .stroke(
+                    .strokeBorder(
                         accent.opacity(contrast == .increased ? 0.48 : 0.20),
                         lineWidth: contrast == .increased ? 1.5 : 1
                     )
             }
-            .shadow(color: .black.opacity(0.055), radius: 12, y: 5)
     }
 }
 

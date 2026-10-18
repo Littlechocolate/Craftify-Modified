@@ -100,7 +100,6 @@ struct RecipeDetailView: View {
             if !isLoading && dataManager.isManualSyncing { dataManager.syncChests() }
         }
         .animation(reduceMotion ? nil : .snappy, value: selectedDetail)
-        .animation(reduceMotion ? nil : .snappy, value: selectedCraftingOption)
     }
 }
 
@@ -135,7 +134,7 @@ private struct RecipeIdentityHeader: View {
         .frame(maxWidth: .infinity)
         .craftifyCard(cornerRadius: 26)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(recipe.name), \(recipe.category), crafting output \(output)")
+        .accessibilityLabel("\(recipe.name), \(recipe.category)")
     }
 
     private var recipeImage: some View {
@@ -163,9 +162,11 @@ private struct RecipeIdentityHeader: View {
             Text(recipe.name)
                 .font(.largeTitle.bold())
                 .multilineTextAlignment(alignment)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) { metadata }
-                VStack(alignment: alignment == .center ? .center : .leading, spacing: 8) { metadata }
+            if !recipe.category.isEmpty {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) { metadata }
+                    VStack(alignment: alignment == .center ? .center : .leading, spacing: 8) { metadata }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: alignment == .center ? .center : .leading)
@@ -176,7 +177,6 @@ private struct RecipeIdentityHeader: View {
         if !recipe.category.isEmpty {
             CraftifyStatusPill(title: recipe.category, symbol: "tag.fill")
         }
-        CraftifyStatusPill(title: "Makes \(output)", symbol: "shippingbox.fill")
     }
 }
 
@@ -280,6 +280,7 @@ private struct CraftingRecipeCard: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.craftifyAccentColor) private var accent
 
     private var cellSize: CGFloat {
@@ -303,6 +304,17 @@ private struct CraftingRecipeCard: View {
         return variants[safeIndex]
     }
 
+    private var layoutPageHeight: CGFloat {
+        let gridHeight = 3 * cellSize + 46
+        let usesVerticalFor3x3 = dynamicTypeSize.isAccessibilitySize || horizontalSizeClass != .regular
+        let has3x3Variant = variants.contains { !$0.isCookingLayout }
+        if usesVerticalFor3x3 && (has3x3Variant || dynamicTypeSize.isAccessibilitySize) {
+            let outputHeight = cellSize + 44
+            return gridHeight + 54 + outputHeight + 12
+        }
+        return gridHeight + 16
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 12) {
@@ -313,6 +325,7 @@ private struct CraftingRecipeCard: View {
                         : "Tap an ingredient or the output to inspect it.",
                     symbol: activeVariant.isCookingLayout ? "flame.fill" : "square.grid.3x3.fill"
                 )
+                .contentTransition(.interpolate)
 
                 if variants.count > 1 {
                     Spacer(minLength: 4)
@@ -320,35 +333,28 @@ private struct CraftingRecipeCard: View {
                         title: "\(safeIndex + 1) / \(variants.count)",
                         symbol: "square.stack.3d.hor.right.fill"
                     )
+                    .contentTransition(.numericText())
                 }
             }
+            .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: safeIndex)
 
             if variants.count > 1 {
-                variantLayoutView(for: activeVariant)
-                    .padding(.vertical, 6)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .hidden()
-                    .accessibilityHidden(true)
-                    .overlay {
-                        TabView(selection: $selectedCraftingOption) {
-                            ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
-                                variantLayoutView(for: variant)
-                                    .padding(.vertical, 6)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                                    .tag(idx)
-                            }
-                        }
-                        .tabViewStyle(.page(indexDisplayMode: .never))
+                TabView(selection: $selectedCraftingOption) {
+                    ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
+                        variantLayoutView(for: variant)
+                            .padding(.vertical, 6)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+                            .tag(idx)
                     }
-                    .clipped()
-                    .animation(.snappy(duration: 0.25), value: safeIndex)
+                }
+                .tabViewStyle(.page(indexDisplayMode: .never))
+                .frame(height: layoutPageHeight)
 
                 HStack(spacing: 8) {
                     Spacer()
                     ForEach(variants.indices, id: \.self) { idx in
                         Button {
-                            withAnimation(.snappy) {
+                            withAnimation(.snappy(duration: 0.24)) {
                                 selectedCraftingOption = idx
                             }
                         } label: {
@@ -361,31 +367,36 @@ private struct CraftingRecipeCard: View {
                     }
                     Spacer()
                 }
+                .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: safeIndex)
             } else {
                 variantLayoutView(for: activeVariant)
             }
 
-            if let imageRemark = activeVariant.imageremark ?? recipe.imageremark,
-               !imageRemark.isEmpty {
+            let resolvedImageRemark = (activeVariant.imageremark ?? recipe.imageremark)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let resolvedRemarks = (activeVariant.remarks ?? recipe.remarks)?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+            if !resolvedImageRemark.isEmpty {
                 Divider()
                     .overlay(Color.primary.opacity(0.08))
 
                 requiredUtilityFooter(
-                    imageRemark: imageRemark,
-                    remarks: activeVariant.remarks ?? recipe.remarks
+                    imageRemark: resolvedImageRemark,
+                    remarks: resolvedRemarks.isEmpty ? nil : resolvedRemarks
                 )
-            } else if let remarks = activeVariant.remarks ?? recipe.remarks,
-                      !remarks.isEmpty {
+            } else if !resolvedRemarks.isEmpty {
                 Divider()
                     .overlay(Color.primary.opacity(0.08))
 
-                Text(remarks)
+                Text(resolvedRemarks)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(20)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
         .craftifyCard(cornerRadius: 24)
     }
 
@@ -490,18 +501,32 @@ private struct CraftingRecipeCard: View {
                     .foregroundStyle(accent)
             }
 
-            HStack(alignment: .center, spacing: 14) {
-                CraftImage(key: imageRemark)
-                    .scaledToFit()
-                    .frame(width: 54, height: 54)
-                    .padding(6)
-                    .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .accessibilityHidden(true)
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    CraftImage(key: imageRemark)
+                        .scaledToFit()
+                        .id(imageRemark)
+                        .transition(
+                            reduceMotion
+                                ? .opacity
+                                : .opacity.combined(with: .scale(scale: 0.92))
+                        )
+                }
+                .frame(width: 54, height: 54)
+                .padding(6)
+                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(imageRemark)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
+                    ZStack(alignment: .leading) {
+                        Text(imageRemark)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                            .id(imageRemark)
+                            .transition(.opacity)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                     Text("Use this utility for the crafting layout shown above.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -513,13 +538,26 @@ private struct CraftingRecipeCard: View {
                             .foregroundStyle(accent)
                             .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 2)
+                            .id(remarks)
+                            .transition(
+                                reduceMotion
+                                    ? .opacity
+                                    : .opacity.combined(with: .move(edge: .top))
+                            )
                     }
                 }
-                Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .geometryGroup()
         }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .geometryGroup()
+        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: imageRemark)
+        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: remarks)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Required Crafting Utility: \(imageRemark)")
     }

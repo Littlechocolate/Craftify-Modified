@@ -90,13 +90,16 @@ final class RecipeVersionManager: ObservableObject {
         let bundleRecipes = Bundle.main.urls(forResourcesWithExtension: "recipe", subdirectory: nil) ?? []
         for url in bundleRecipes {
             let verName = url.deletingPathExtension().lastPathComponent
-            let bundleFileSize = (try? fileManager.attributesOfItem(atPath: url.path)[.size] as? Int) ?? 0
+            let attrs = try? fileManager.attributesOfItem(atPath: url.path)
+            let bundleFileSize = (attrs?[.size] as? Int) ?? 0
+            let bundleModTime = Int((attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
+            let currentStampPrefix = "\(bundleFileSize):\(bundleModTime):"
             let storedStamp = defaults.string(forKey: bundledStampKey(for: verName)) ?? ""
             let existing = installedVersions.first(where: { $0.version == verName })
             let needsIconUpgrade = existing != nil && existing!.isDefault && (
                 existing!.iconCount == 0
                 || !CraftImageStore.shared.hasVersionIcons(for: verName)
-                || !storedStamp.hasPrefix("\(bundleFileSize):")
+                || !storedStamp.hasPrefix(currentStampPrefix)
             )
             if existing == nil || needsIconUpgrade {
                 _ = importBundledRecipe(from: url, isDefault: true)
@@ -147,7 +150,9 @@ final class RecipeVersionManager: ObservableObject {
             fileName: fileName
         )
 
-        defaults.set("\(data.count):\(package.createdAt ?? "")", forKey: bundledStampKey(for: package.gameVersion))
+        let attrs = try? fileManager.attributesOfItem(atPath: url.path)
+        let bundleModTime = Int((attrs?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0)
+        defaults.set("\(data.count):\(bundleModTime):\(package.createdAt ?? "")", forKey: bundledStampKey(for: package.gameVersion))
         installedVersions.removeAll { $0.version == info.version }
         installedVersions.append(info)
         saveMetadata()

@@ -373,6 +373,7 @@ class IsometricRenderer:
         depth_buf: np.ndarray,
         gui_light: str = "side",
         extra_offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
+        sub_rot_y: float = 0.0,
     ):
         rot_deg = gui_transform.get("rotation", [30, 225, 0])
         trans = gui_transform.get("translation", [0, 0, 0])
@@ -382,6 +383,7 @@ class IsometricRenderer:
         S_gui = np.array(scale, dtype=np.float64)
         T_gui = np.array(trans, dtype=np.float64)
         offset_vec = np.array(extra_offset, dtype=np.float64)
+        R_sub = rot_y(sub_rot_y) if abs(sub_rot_y) > 1e-3 else None
 
         N = color_buf.shape[0]
         half_N = N / 2.0
@@ -426,6 +428,10 @@ class IsometricRenderer:
                     verts = (verts - origin) @ R_el.T * np.array(rs) + origin
                     normal = normal @ R_el.T
 
+                if R_sub is not None:
+                    verts = (verts - 8.0) @ R_sub.T + 8.0
+                    normal = normal @ R_sub.T
+
                 verts = verts + offset_vec
                 v_centered = verts - 8.0
                 v_view = (v_centered @ R_gui.T) * S_gui + T_gui
@@ -448,7 +454,7 @@ class IsometricRenderer:
                     t_idx = face_spec["tintindex"]
                     if tints and 0 <= t_idx < len(tints):
                         tint_rgb = self.get_tint_color(tints[t_idx])
-                    else:
+                    elif "stonecutter" not in tex_id:
                         tint_rgb = (121, 192, 90)
 
                 uv_rot = face_spec.get("rotation", 0)
@@ -676,6 +682,7 @@ class IsometricRenderer:
         out_size: int,
         extra_offset: Tuple[float, float, float] = (0.0, 0.0, 0.0),
         custom_gui_transform: Optional[Dict[str, Any]] = None,
+        sub_rot_y: float = 0.0,
     ) -> Optional[Image.Image]:
         mtype = spec.get("type", "minecraft:model")
         if mtype == "minecraft:select":
@@ -684,27 +691,35 @@ class IsometricRenderer:
                     when_val = case.get("when", [])
                     if when_val == "gui" or (isinstance(when_val, list) and "gui" in when_val):
                         return self._dispatch_model_spec(
-                            case.get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform
+                            case.get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y
                         )
             fallback = spec.get("fallback")
             if fallback:
-                return self._dispatch_model_spec(fallback, color_buf, depth_buf, out_size, extra_offset, custom_gui_transform)
+                return self._dispatch_model_spec(fallback, color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y)
             cases = spec.get("cases", [])
             if cases:
-                return self._dispatch_model_spec(cases[0].get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform)
+                return self._dispatch_model_spec(cases[0].get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y)
         elif mtype == "minecraft:condition":
             return self._dispatch_model_spec(
-                spec.get("on_false", spec.get("on_true", {})), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform
+                spec.get("on_false", spec.get("on_true", {})), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y
             )
         elif mtype == "minecraft:range_dispatch":
             entries = spec.get("entries", [])
             if entries:
-                return self._dispatch_model_spec(entries[0].get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform)
+                return self._dispatch_model_spec(entries[0].get("model", {}), color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y)
             if "fallback" in spec:
-                return self._dispatch_model_spec(spec["fallback"], color_buf, depth_buf, out_size, extra_offset, custom_gui_transform)
+                return self._dispatch_model_spec(spec["fallback"], color_buf, depth_buf, out_size, extra_offset, custom_gui_transform, sub_rot_y)
         elif mtype == "minecraft:composite":
             for sub in spec.get("models", []):
-                trans = sub.get("transformation", {}).get("translation", [0.0, 0.0, 0.0])
+                tf_obj = sub.get("transformation", {})
+                trans = tf_obj.get("translation", [0.0, 0.0, 0.0])
+                left_rot = tf_obj.get("left_rotation", [0.0, 0.0, 0.0, 1.0])
+                child_rot_y = sub_rot_y
+                if isinstance(left_rot, list) and len(left_rot) == 4:
+                    qy, qw = float(left_rot[1]), float(left_rot[3])
+                    if abs(qy) > 1e-3:
+                        angle_rad = 2.0 * math.atan2(qy, qw)
+                        child_rot_y += math.degrees(angle_rad)
                 self._dispatch_model_spec(
                     sub,
                     color_buf,
@@ -712,6 +727,7 @@ class IsometricRenderer:
                     out_size,
                     (extra_offset[0] + trans[0] * 16.0, extra_offset[1] + trans[1] * 16.0, extra_offset[2] - trans[2] * 16.0),
                     custom_gui_transform,
+                    child_rot_y,
                 )
             return None
         elif mtype == "minecraft:special":
@@ -785,6 +801,7 @@ class IsometricRenderer:
                     depth_buf,
                     resolved["gui_light"],
                     extra_offset,
+                    sub_rot_y=sub_rot_y,
                 )
         return None
 

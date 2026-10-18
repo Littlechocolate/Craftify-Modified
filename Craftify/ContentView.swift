@@ -291,6 +291,8 @@ struct RecipeListView: View {
         )
     }
 
+    @State private var lastScrollTarget: String?
+
     var body: some View {
         Group {
             if dataManager.recipes.isEmpty {
@@ -321,7 +323,9 @@ struct RecipeListView: View {
                             availableLetters: availableLettersSet,
                             accent: accent
                         ) { selectedLetter in
-                            if let target = resolveScrollTarget(for: selectedLetter) {
+                            if let target = resolveScrollTarget(for: selectedLetter),
+                               lastScrollTarget != target {
+                                lastScrollTarget = target
                                 var transaction = Transaction()
                                 transaction.disablesAnimations = true
                                 withTransaction(transaction) {
@@ -383,10 +387,11 @@ struct RecipeListView: View {
                 .accessibilityAddTraits(.isHeader)
 
             if isSingleColumn {
-                VStack(spacing: 12) {
+                LazyVStack(spacing: 12) {
                     ForEach(items) { recipe in
                         NavigationLink(value: recipe) {
                             RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                .equatable()
                         }
                         .buttonStyle(.plain)
                     }
@@ -396,6 +401,7 @@ struct RecipeListView: View {
                     ForEach(items) { recipe in
                         NavigationLink(value: recipe) {
                             RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                .equatable()
                         }
                         .buttonStyle(.plain)
                     }
@@ -406,13 +412,52 @@ struct RecipeListView: View {
 }
 
 @MainActor
+private struct IndexBarStaticTrack: View, Equatable {
+    let alphabet: [String]
+    let availableLetters: Set<String>
+    let accent: Color
+    let showDots: Bool
+    let letterHeight: CGFloat
+    let dotHeight: CGFloat
+
+    static func == (lhs: IndexBarStaticTrack, rhs: IndexBarStaticTrack) -> Bool {
+        lhs.availableLetters == rhs.availableLetters
+            && lhs.showDots == rhs.showDots
+            && lhs.letterHeight == rhs.letterHeight
+            && lhs.accent == rhs.accent
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(alphabet.enumerated()), id: \.offset) { idx, letter in
+                let isAvailable = availableLetters.contains(letter)
+
+                Text(letter)
+                    .font(.system(size: showDots ? 10 : 9.5, weight: isAvailable ? .bold : .medium, design: .rounded))
+                    .foregroundStyle(isAvailable ? accent : Color.secondary.opacity(0.38))
+                    .frame(width: 18, height: letterHeight)
+
+                if showDots && idx < alphabet.count - 1 {
+                    Text("·")
+                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color.secondary.opacity(0.42))
+                        .frame(width: 18, height: dotHeight)
+                }
+            }
+        }
+        .drawingGroup()
+    }
+}
+
+@MainActor
 struct RecipeAlphabetIndexBar: View {
     let alphabet: [String]
     let availableLetters: Set<String>
     let accent: Color
     let onSelectLetter: (String) -> Void
 
-    @State private var activeLetter: String?
+    @State private var activeIndex: Int?
+    @State private var lastScrolledLetter: String?
 
     var body: some View {
         GeometryReader { geo in
@@ -420,37 +465,35 @@ struct RecipeAlphabetIndexBar: View {
             let showDots = totalHeight >= 470
             let letterHeight: CGFloat = showDots ? 12 : max(9, min(14, (totalHeight - 16) / CGFloat(alphabet.count)))
             let dotHeight: CGFloat = 5
+            let stepHeight: CGFloat = letterHeight + (showDots ? dotHeight : 0)
             let barContentHeight = CGFloat(alphabet.count) * letterHeight
                 + (showDots ? CGFloat(alphabet.count - 1) * dotHeight : 0)
                 + 12
 
-            VStack(spacing: 0) {
-                ForEach(Array(alphabet.enumerated()), id: \.element) { idx, letter in
-                    let isAvailable = availableLetters.contains(letter)
-                    let isActive = activeLetter == letter
-
-                    Text(letter)
-                        .font(.system(size: showDots ? 10 : 9.5, weight: isActive ? .heavy : (isAvailable ? .bold : .medium), design: .rounded))
-                        .foregroundStyle(
-                            isActive
-                                ? Color.white
-                                : (isAvailable ? accent : Color.secondary.opacity(0.4))
-                        )
-                        .frame(width: 18, height: letterHeight)
-                        .background {
-                            if isActive {
-                                Circle()
-                                    .fill(accent)
-                                    .frame(width: 15, height: 15)
-                            }
-                        }
-
-                    if showDots && idx < alphabet.count - 1 {
-                        Text("·")
-                            .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                            .foregroundStyle(Color.secondary.opacity(0.45))
-                            .frame(width: 18, height: dotHeight)
+            IndexBarStaticTrack(
+                alphabet: alphabet,
+                availableLetters: availableLetters,
+                accent: accent,
+                showDots: showDots,
+                letterHeight: letterHeight,
+                dotHeight: dotHeight
+            )
+            .equatable()
+            .overlay(alignment: .top) {
+                if let idx = activeIndex, alphabet.indices.contains(idx) {
+                    let letter = alphabet[idx]
+                    let yCenter = CGFloat(idx) * stepHeight + letterHeight * 0.5
+                    ZStack {
+                        Circle()
+                            .fill(accent)
+                            .frame(width: 16, height: 16)
+                        Text(letter)
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color.white)
                     }
+                    .frame(width: 18, height: 18)
+                    .offset(y: yCenter - 9)
+                    .allowsHitTesting(false)
                 }
             }
             .padding(.vertical, 6)
@@ -470,15 +513,22 @@ struct RecipeAlphabetIndexBar: View {
                         let y = value.location.y - 6
                         let ratio = min(max(y / usableHeight, 0), 0.9999)
                         let index = Int(ratio * CGFloat(alphabet.count))
-                        let letter = alphabet[index]
-                        if activeLetter != letter {
-                            activeLetter = letter
+                        if activeIndex != index {
+                            if activeIndex == nil {
+                                HapticFeedback.prepareSelection()
+                            }
+                            activeIndex = index
+                            let letter = alphabet[index]
                             HapticFeedback.selection()
-                            onSelectLetter(letter)
+                            if lastScrolledLetter != letter {
+                                lastScrolledLetter = letter
+                                onSelectLetter(letter)
+                            }
                         }
                     }
                     .onEnded { _ in
-                        activeLetter = nil
+                        activeIndex = nil
+                        lastScrolledLetter = nil
                     }
             )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -490,9 +540,15 @@ struct RecipeAlphabetIndexBar: View {
 }
 
 @MainActor
-struct RecipeCell: View {
+struct RecipeCell: View, Equatable {
     let recipe: Recipe
     let isCraftifyPick: Bool
+
+    nonisolated static func == (lhs: RecipeCell, rhs: RecipeCell) -> Bool {
+        lhs.recipe.id == rhs.recipe.id
+            && lhs.recipe.name == rhs.recipe.name
+            && lhs.isCraftifyPick == rhs.isCraftifyPick
+    }
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

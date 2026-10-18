@@ -281,10 +281,11 @@ struct RecipeSearchView: View {
                         .accessibilityAddTraits(.isHeader)
 
                     if isSingleColumn {
-                        VStack(spacing: 12) {
+                        LazyVStack(spacing: 12) {
                             ForEach(items) { recipe in
                                 NavigationLink(value: recipe) {
                                     RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                        .equatable()
                                 }
                                 .buttonStyle(.plain)
                             }
@@ -294,6 +295,7 @@ struct RecipeSearchView: View {
                             ForEach(items) { recipe in
                                 NavigationLink(value: recipe) {
                                     RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                        .equatable()
                                 }
                                 .buttonStyle(.plain)
                             }
