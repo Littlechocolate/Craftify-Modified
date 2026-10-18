@@ -104,7 +104,6 @@ struct RecipeSearchView: View {
     }
 
     @State private var measuredScrollY: CGFloat = 0
-    @State private var lastReportedOffset: CGFloat = 0
     @State private var jumpTargetY: CGFloat?
     @State private var viewportHeight: CGFloat = 850
 
@@ -144,24 +143,27 @@ struct RecipeSearchView: View {
                 }
                 .coordinateSpace(name: Self.scrollSpaceName)
                 .scrollIndicators(.hidden)
-                .background(
-                    GeometryReader { geo in
-                        Color.clear
-                            .onAppear {
-                                if geo.size.height > 100 {
-                                    viewportHeight = geo.size.height
-                                }
+                .modifier(
+                    RecipeScrollViewportTracker(topContentHeight: 76) { newOffset, containerH in
+                        if containerH > 100, abs(containerH - viewportHeight) > 1 {
+                            viewportHeight = containerH
+                        }
+                        if let targetY = jumpTargetY {
+                            if abs(newOffset - targetY) <= 450 {
+                                measuredScrollY = newOffset
                             }
-                            .onChange(of: geo.size.height) { _, newHeight in
-                                if newHeight > 100 {
-                                    viewportHeight = newHeight
-                                }
-                            }
+                        } else if abs(newOffset - measuredScrollY) >= 48 {
+                            measuredScrollY = newOffset
+                        }
                     }
                 )
                 .onPreferenceChange(RecipeSectionsScrollOffsetKey.self) { newOffset in
-                    lastReportedOffset = newOffset
-                    if abs(newOffset - measuredScrollY) >= 48 {
+                    guard #unavailable(iOS 18.0) else { return }
+                    if let targetY = jumpTargetY {
+                        if abs(newOffset - targetY) <= 450 {
+                            measuredScrollY = newOffset
+                        }
+                    } else if abs(newOffset - measuredScrollY) >= 48 {
                         measuredScrollY = newOffset
                     }
                 }
@@ -195,7 +197,9 @@ struct RecipeSearchView: View {
                                 }
                             },
                             onEndScrubbing: {
-                                measuredScrollY = lastReportedOffset
+                                if let targetY = jumpTargetY, abs(measuredScrollY - targetY) > 450 {
+                                    measuredScrollY = targetY
+                                }
                                 jumpTargetY = nil
                             }
                         )
