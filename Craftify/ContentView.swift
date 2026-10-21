@@ -553,6 +553,7 @@ struct RecipeListView: View {
     @State private var measuredScrollY: CGFloat = 0
     @State private var jumpTargetY: CGFloat?
     @State private var viewportHeight: CGFloat = 850
+    @State private var scrollTask: Task<Void, Never>?
 
     var body: some View {
         let layout = sectionsLayout
@@ -629,18 +630,23 @@ struct RecipeListView: View {
                             availableLetters: availableLettersSet,
                             accent: accent,
                             onSelectLetter: { selectedLetter in
-                                if let target = resolveScrollTarget(for: selectedLetter),
-                                   let section = layout.sectionsByLetter[target] {
-                                    let clampedY = min(
-                                        section.relMinY,
-                                        max(0, layout.totalHeight - viewportHeight)
-                                    )
-                                    var transaction = Transaction()
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        jumpTargetY = clampedY
-                                        measuredScrollY = clampedY
-                                        proxy.scrollTo(target, anchor: .top)
+                                scrollTask?.cancel()
+                                scrollTask = Task { @MainActor in
+                                    await Task.yield()
+                                    guard !Task.isCancelled else { return }
+                                    if let target = resolveScrollTarget(for: selectedLetter),
+                                       let section = layout.sectionsByLetter[target] {
+                                        let clampedY = min(
+                                            section.relMinY,
+                                            max(0, layout.totalHeight - viewportHeight)
+                                        )
+                                        var transaction = Transaction()
+                                        transaction.disablesAnimations = true
+                                        withTransaction(transaction) {
+                                            jumpTargetY = clampedY
+                                            measuredScrollY = clampedY
+                                            proxy.scrollTo(target, anchor: .top)
+                                        }
                                     }
                                 }
                             },
@@ -743,6 +749,8 @@ struct RecipeAlphabetIndexBar: View {
     var onEndScrubbing: (() -> Void)? = nil
 
     @State private var activeIndex: Int?
+    @State private var isTouching = false
+    @State private var indicatorY: CGFloat = 0
     @State private var lastScrolledLetter: String?
 
     var body: some View {
@@ -756,68 +764,104 @@ struct RecipeAlphabetIndexBar: View {
                 + (showDots ? CGFloat(alphabet.count - 1) * dotHeight : 0)
                 + 12
 
-            IndexBarStaticTrack(
-                alphabet: alphabet,
-                availableLetters: availableLetters,
-                accent: accent,
-                showDots: showDots,
-                letterHeight: letterHeight,
-                dotHeight: dotHeight
-            )
-            .equatable()
-            .overlay(alignment: .top) {
-                if let idx = activeIndex, alphabet.indices.contains(idx) {
+            ZStack(alignment: .topTrailing) {
+                // Floating HUD callout bubble (iOS native style, appears to the left of the bar)
+                if isTouching, let idx = activeIndex, alphabet.indices.contains(idx) {
                     let letter = alphabet[idx]
-                    let yCenter = CGFloat(idx) * stepHeight + letterHeight * 0.5
                     ZStack {
-                        Circle()
-                            .fill(accent)
-                            .frame(width: 16, height: 16)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .fill(.ultraThickMaterial)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                            }
+                            .shadow(color: Color.black.opacity(0.16), radius: 8, x: -3, y: 3)
+
                         Text(letter)
-                            .font(.system(size: 10, weight: .heavy, design: .rounded))
-                            .foregroundStyle(Color.white)
+                            .font(.system(size: 26, weight: .bold, design: .rounded))
+                            .foregroundStyle(accent)
                     }
-                    .frame(width: 18, height: 18)
-                    .offset(y: yCenter - 9)
+                    .frame(width: 50, height: 50)
+                    .offset(x: -36, y: max(0, min(indicatorY - 25, barContentHeight - 50)))
+                    .transition(.scale(scale: 0.75).combined(with: .opacity))
                     .allowsHitTesting(false)
                 }
-            }
-            .padding(.vertical, 6)
-            .padding(.horizontal, 2)
-            .frame(width: 22, height: barContentHeight)
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay(
-                Capsule()
-                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
-            )
-            .padding(.leading, 6)
-            .contentShape(Rectangle())
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                    .onChanged { value in
-                        let usableHeight = max(barContentHeight - 12, 1)
-                        let y = value.location.y - 6
-                        let ratio = min(max(y / usableHeight, 0), 0.9999)
-                        let index = Int(ratio * CGFloat(alphabet.count))
-                        if activeIndex != index {
-                            if activeIndex == nil {
+
+                // Index track
+                IndexBarStaticTrack(
+                    alphabet: alphabet,
+                    availableLetters: availableLetters,
+                    accent: accent,
+                    showDots: showDots,
+                    letterHeight: letterHeight,
+                    dotHeight: dotHeight
+                )
+                .equatable()
+                .overlay(alignment: .top) {
+                    if isTouching, let idx = activeIndex, alphabet.indices.contains(idx) {
+                        let letter = alphabet[idx]
+                        ZStack {
+                            Circle()
+                                .fill(accent)
+                                .frame(width: 16, height: 16)
+                            Text(letter)
+                                .font(.system(size: 10, weight: .heavy, design: .rounded))
+                                .foregroundStyle(Color.white)
+                        }
+                        .frame(width: 18, height: 18)
+                        .offset(y: indicatorY - 9)
+                        .allowsHitTesting(false)
+                    }
+                }
+                .padding(.vertical, 6)
+                .padding(.horizontal, 2)
+                .frame(width: 22, height: barContentHeight)
+                .background(.ultraThinMaterial, in: Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
+                .contentShape(Rectangle())
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                        .onChanged { value in
+                            let usableHeight = max(barContentHeight - 12, 1)
+                            let y = value.location.y - 6
+                            let ratio = min(max(y / usableHeight, 0), 0.9999)
+                            let index = Int(ratio * CGFloat(alphabet.count))
+                            let targetY = CGFloat(index) * stepHeight + letterHeight * 0.5 + 6
+
+                            if !isTouching {
                                 HapticFeedback.prepareSelection()
+                                withAnimation(.spring(response: 0.18, dampingFraction: 0.82)) {
+                                    isTouching = true
+                                }
                             }
-                            activeIndex = index
-                            let letter = alphabet[index]
-                            HapticFeedback.selection()
-                            if lastScrolledLetter != letter {
-                                lastScrolledLetter = letter
-                                onSelectLetter(letter)
+
+                            withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.82)) {
+                                indicatorY = targetY
+                            }
+
+                            if activeIndex != index {
+                                activeIndex = index
+                                let letter = alphabet[index]
+                                HapticFeedback.selection()
+                                if lastScrolledLetter != letter {
+                                    lastScrolledLetter = letter
+                                    onSelectLetter(letter)
+                                }
                             }
                         }
-                    }
-                    .onEnded { _ in
-                        activeIndex = nil
-                        lastScrolledLetter = nil
-                        onEndScrubbing?()
-                    }
-            )
+                        .onEnded { _ in
+                            withAnimation(.spring(response: 0.22, dampingFraction: 0.85)) {
+                                isTouching = false
+                                activeIndex = nil
+                            }
+                            lastScrolledLetter = nil
+                            onEndScrubbing?()
+                        }
+                )
+            }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
         .frame(width: 28)
@@ -890,8 +934,13 @@ struct RecipeCell: View, Equatable {
         .frame(maxWidth: .infinity, minHeight: fixedHeight, maxHeight: fixedHeight, alignment: .leading)
     }
 
+    private var threeLinesHeadlineHeight: CGFloat {
+        let font = UIFont.preferredFont(forTextStyle: .headline)
+        return ceil(font.lineHeight * 3 + 2)
+    }
+
     private var pickContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .center, spacing: 10) {
             ZStack(alignment: .topLeading) {
                 recipeImage(size: horizontalSizeClass == .regular ? 96 : 82)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -901,17 +950,26 @@ struct RecipeCell: View, Equatable {
             }
             .frame(height: horizontalSizeClass == .regular ? 142 : 124)
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .center, spacing: 6) {
                 Text(recipe.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
-                    .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.85)
+                    .frame(height: threeLinesHeadlineHeight, alignment: .center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
                 Text(recipe.category)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, alignment: .center)
+
                 if !recipe.craftingUtilities.isEmpty {
                     craftingUtilityIconsRow(iconSize: 18)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
             .padding(.horizontal, 12)

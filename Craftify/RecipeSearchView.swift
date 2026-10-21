@@ -106,6 +106,7 @@ struct RecipeSearchView: View {
     @State private var measuredScrollY: CGFloat = 0
     @State private var jumpTargetY: CGFloat?
     @State private var viewportHeight: CGFloat = 850
+    @State private var scrollTask: Task<Void, Never>?
 
     var body: some View {
         let layout = sectionsLayout
@@ -181,18 +182,23 @@ struct RecipeSearchView: View {
                             availableLetters: availableLettersSet,
                             accent: accent,
                             onSelectLetter: { selectedLetter in
-                                if let target = resolveScrollTarget(for: selectedLetter),
-                                   let section = layout.sectionsByLetter[target] {
-                                    let clampedY = min(
-                                        section.relMinY,
-                                        max(0, layout.totalHeight - viewportHeight)
-                                    )
-                                    var transaction = Transaction()
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        jumpTargetY = clampedY
-                                        measuredScrollY = clampedY
-                                        proxy.scrollTo(target, anchor: .top)
+                                scrollTask?.cancel()
+                                scrollTask = Task { @MainActor in
+                                    await Task.yield()
+                                    guard !Task.isCancelled else { return }
+                                    if let target = resolveScrollTarget(for: selectedLetter),
+                                       let section = layout.sectionsByLetter[target] {
+                                        let clampedY = min(
+                                            section.relMinY,
+                                            max(0, layout.totalHeight - viewportHeight)
+                                        )
+                                        var transaction = Transaction()
+                                        transaction.disablesAnimations = true
+                                        withTransaction(transaction) {
+                                            jumpTargetY = clampedY
+                                            measuredScrollY = clampedY
+                                            proxy.scrollTo(target, anchor: .top)
+                                        }
                                     }
                                 }
                             },

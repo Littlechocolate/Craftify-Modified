@@ -452,33 +452,17 @@ private struct CraftingRecipeCard: View {
                         .scaledToFit()
                         .frame(width: 18, height: 18)
 
-                    Text(info.station)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-
                     Text(String(format: "%.0fs", info.seconds))
                         .font(.caption.monospacedDigit().bold())
                         .foregroundStyle(accent)
-
-                    if info.speedMultiplier > 1.0 {
-                        Text(info.speedBadge)
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color.orange, in: Capsule())
-                    } else if info.station == "Campfire" {
-                        Text("No Fuel")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.teal)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 1.5)
-                            .background(Color.teal.opacity(0.14), in: Capsule())
-                    }
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(Color.primary.opacity(0.04), in: Capsule())
+                .overlay(
+                    Capsule()
+                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                )
             }
 
             if let xp = variant.parsedXP {
@@ -618,8 +602,6 @@ struct CookingUtilityCard: View {
                         .font(.headline)
                         .foregroundStyle(.primary)
 
-                    speedBadge
-
                     Spacer(minLength: 4)
 
                     timeBadge
@@ -653,33 +635,6 @@ struct CookingUtilityCard: View {
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .geometryGroup()
-    }
-
-    @ViewBuilder
-    private var speedBadge: some View {
-        if info.speedMultiplier > 1.0 {
-            HStack(spacing: 3) {
-                Image(systemName: "bolt.fill")
-                    .font(.system(size: 8, weight: .bold))
-                Text(info.speedBadge)
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.orange, in: Capsule())
-        } else if info.station == "Campfire" {
-            HStack(spacing: 3) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 8, weight: .bold))
-                Text(info.speedBadge)
-                    .font(.system(size: 10, weight: .bold))
-            }
-            .foregroundStyle(.teal)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(Color.teal.opacity(0.12), in: Capsule())
-        }
     }
 
     private var timeBadge: some View {
