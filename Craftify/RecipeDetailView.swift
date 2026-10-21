@@ -310,9 +310,9 @@ private struct CraftingRecipeCard: View {
         let has3x3Variant = variants.contains { !$0.isCookingLayout }
         if usesVerticalFor3x3 && (has3x3Variant || dynamicTypeSize.isAccessibilitySize) {
             let outputHeight = cellSize + 44
-            return gridHeight + 54 + outputHeight + 12
+            return gridHeight + 54 + outputHeight + 36
         }
-        return gridHeight + 16
+        return gridHeight + 24
     }
 
     var body: some View {
@@ -372,24 +372,20 @@ private struct CraftingRecipeCard: View {
                 variantLayoutView(for: activeVariant)
             }
 
-            let resolvedImageRemark = (activeVariant.imageremark ?? recipe.imageremark)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            let resolvedRemarks = (activeVariant.remarks ?? recipe.remarks)?
-                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let hasUtilities = !activeVariant.resolvedStations.isEmpty ||
+                (activeVariant.imageremark?.isEmpty == false) ||
+                (recipe.imageremark?.isEmpty == false)
 
-            if !resolvedImageRemark.isEmpty {
+            if hasUtilities {
                 Divider()
                     .overlay(Color.primary.opacity(0.08))
 
-                requiredUtilityFooter(
-                    imageRemark: resolvedImageRemark,
-                    remarks: resolvedRemarks.isEmpty ? nil : resolvedRemarks
-                )
-            } else if !resolvedRemarks.isEmpty {
+                requiredUtilitiesSection(for: activeVariant)
+            } else if let remarks = (activeVariant.remarks ?? recipe.remarks)?.trimmingCharacters(in: .whitespacesAndNewlines), !remarks.isEmpty {
                 Divider()
                     .overlay(Color.primary.opacity(0.08))
 
-                Text(resolvedRemarks)
+                Text(remarks)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -413,27 +409,94 @@ private struct CraftingRecipeCard: View {
     }
 
     private func horizontalLayout(for variant: CraftingVariant) -> some View {
-        HStack(spacing: horizontalSizeClass == .regular ? 28 : 20) {
-            craftingGrid(for: variant)
-            Image(systemName: "arrow.right")
-                .font(.title.bold())
-                .foregroundStyle(accent)
-                .accessibilityHidden(true)
-            outputTile(output: variant.output)
+        VStack(spacing: 12) {
+            HStack(spacing: horizontalSizeClass == .regular ? 28 : 20) {
+                craftingGrid(for: variant)
+                Image(systemName: "arrow.right")
+                    .font(.title.bold())
+                    .foregroundStyle(accent)
+                    .accessibilityHidden(true)
+                outputTile(output: variant.output)
+            }
+            .frame(maxWidth: .infinity)
+
+            if variant.isCookingLayout {
+                cookingTimesComparisonBar(for: variant)
+            }
         }
         .frame(maxWidth: .infinity)
     }
 
     private func verticalLayout(for variant: CraftingVariant) -> some View {
-        VStack(spacing: 15) {
+        VStack(spacing: 14) {
             craftingGrid(for: variant)
             Image(systemName: "arrow.down")
                 .font(.title2.bold())
                 .foregroundStyle(accent)
                 .accessibilityHidden(true)
             outputTile(output: variant.output)
+
+            if variant.isCookingLayout {
+                cookingTimesComparisonBar(for: variant)
+            }
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func cookingTimesComparisonBar(for variant: CraftingVariant) -> some View {
+        let infos = variant.cookingStationInfos
+        return HStack(spacing: 8) {
+            ForEach(infos) { info in
+                HStack(spacing: 5) {
+                    CraftImage(key: info.station)
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+
+                    Text(info.station)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.primary)
+
+                    Text(String(format: "%.0fs", info.seconds))
+                        .font(.caption.monospacedDigit().bold())
+                        .foregroundStyle(accent)
+
+                    if info.speedMultiplier > 1.0 {
+                        Text(info.speedBadge)
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.orange, in: Capsule())
+                    } else if info.station == "Campfire" {
+                        Text("No Fuel")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.teal)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 1.5)
+                            .background(Color.teal.opacity(0.14), in: Capsule())
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.primary.opacity(0.04), in: Capsule())
+            }
+
+            if let xp = variant.parsedXP {
+                Spacer(minLength: 4)
+                HStack(spacing: 3) {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 9, weight: .bold))
+                    Text(String(format: "+%.2g XP", xp))
+                        .font(.caption2.bold())
+                }
+                .foregroundStyle(.green)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(Color.green.opacity(0.10), in: Capsule())
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 2)
     }
 
     @ViewBuilder
@@ -489,77 +552,222 @@ private struct CraftingRecipeCard: View {
         .accessibilityHint("Shows output details")
     }
 
-    private func requiredUtilityFooter(imageRemark: String, remarks: String?) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private func requiredUtilitiesSection(for variant: CraftingVariant) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "hammer.fill")
+                Image(systemName: "wrench.and.screwdriver.fill")
                     .font(.caption.bold())
                     .foregroundStyle(accent)
-                Text("REQUIRED CRAFTING UTILITY")
+                Text("REQUIRED CRAFTING UTILITIES")
                     .font(.caption.bold())
                     .tracking(0.8)
                     .foregroundStyle(accent)
             }
 
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    CraftImage(key: imageRemark)
-                        .scaledToFit()
-                        .id(imageRemark)
-                        .transition(
-                            reduceMotion
-                                ? .opacity
-                                : .opacity.combined(with: .scale(scale: 0.92))
-                        )
-                }
-                .frame(width: 54, height: 54)
-                .padding(6)
-                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    ZStack(alignment: .leading) {
-                        Text(imageRemark)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
-                            .id(imageRemark)
-                            .transition(.opacity)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    Text("Use this utility for the crafting layout shown above.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    if let remarks, !remarks.isEmpty {
-                        Text(remarks)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(accent)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 2)
-                            .id(remarks)
-                            .transition(
-                                reduceMotion
-                                    ? .opacity
-                                    : .opacity.combined(with: .move(edge: .top))
-                            )
+            if variant.isCookingLayout {
+                let infos = variant.cookingStationInfos
+                VStack(spacing: 10) {
+                    ForEach(infos) { info in
+                        CookingUtilityCard(info: info)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+            } else {
+                let stations = variant.resolvedStations.isEmpty
+                    ? [(variant.imageremark ?? recipe.imageremark ?? "Crafting Table")]
+                    : variant.resolvedStations
+                VStack(spacing: 10) {
+                    ForEach(stations, id: \.self) { station in
+                        StandardUtilityCard(station: station, remarks: variant.remarks ?? recipe.remarks)
+                    }
+                }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
-            .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .geometryGroup()
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .geometryGroup()
-        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: imageRemark)
-        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: remarks)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Required Crafting Utility: \(imageRemark)")
+        .animation(reduceMotion ? nil : .snappy(duration: 0.26), value: variant)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Required Crafting Utilities")
+    }
+}
+
+@MainActor
+struct CookingUtilityCard: View {
+    let info: CookingStationInfo
+    @Environment(\.craftifyAccentColor) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                CraftImage(key: info.station)
+                    .scaledToFit()
+                    .id(info.station)
+            }
+            .frame(width: 54, height: 54)
+            .padding(6)
+            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(accent.opacity(0.18), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .center, spacing: 8) {
+                    Text(info.displayName)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+
+                    speedBadge
+
+                    Spacer(minLength: 4)
+
+                    timeBadge
+                }
+
+                Text(info.stationDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                HStack(spacing: 8) {
+                    Label(info.fuelDescription, systemImage: info.station == "Campfire" ? "leaf.fill" : "flame.fill")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+
+                    if let xp = info.xp {
+                        Text("•")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        Label(String(format: "+%.2g XP", xp), systemImage: "sparkles")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.green)
+                    }
+                }
+                .padding(.top, 2)
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .geometryGroup()
+    }
+
+    @ViewBuilder
+    private var speedBadge: some View {
+        if info.speedMultiplier > 1.0 {
+            HStack(spacing: 3) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 8, weight: .bold))
+                Text(info.speedBadge)
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.orange, in: Capsule())
+        } else if info.station == "Campfire" {
+            HStack(spacing: 3) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 8, weight: .bold))
+                Text(info.speedBadge)
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.teal)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.teal.opacity(0.12), in: Capsule())
+        }
+    }
+
+    private var timeBadge: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.fill")
+                .font(.caption2)
+                .foregroundStyle(accent)
+            Text(String(format: "%.0fs", info.seconds))
+                .font(.subheadline.monospacedDigit().bold())
+                .foregroundStyle(.primary)
+            Text("(\(info.ticks)t)")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(accent.opacity(0.09), in: Capsule())
+    }
+}
+
+@MainActor
+struct StandardUtilityCard: View {
+    let station: String
+    let remarks: String?
+    @Environment(\.craftifyAccentColor) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var utilityDescription: String {
+        switch station {
+        case "Crafting Table":
+            return "Standard 3×3 crafting grid for assembling blocks, tools, and items."
+        case "Stonecutter":
+            return "Precision masonry cutting with exact 1:1 ingredient yield."
+        case "Smithing Table":
+            return "Upgrades armor and tools using smithing templates and materials."
+        default:
+            return "Use this utility for the crafting layout shown above."
+        }
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            ZStack {
+                CraftImage(key: station)
+                    .scaledToFit()
+                    .id(station)
+                    .transition(
+                        reduceMotion
+                            ? .opacity
+                            : .opacity.combined(with: .scale(scale: 0.92))
+                    )
+            }
+            .frame(width: 54, height: 54)
+            .padding(6)
+            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(accent.opacity(0.18), lineWidth: 1)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(station)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                    .id(station)
+
+                Text(utilityDescription)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let remarks, !remarks.isEmpty {
+                    Text(remarks)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(accent)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                        .id(remarks)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .geometryGroup()
     }
 }
 

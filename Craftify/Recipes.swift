@@ -145,15 +145,122 @@ enum DuplicateResolution: String, CaseIterable, Identifiable {
     }
 }
 
+/// Detailed cooking and smelting station metrics for distinguishing furnace types
+struct CookingStationInfo: Identifiable, Codable, Equatable, Hashable {
+    var id: String { station }
+    let station: String            // "Furnace", "Blast Furnace", "Smoker", "Campfire"
+    let displayName: String        // "Furnace", "Blast Furnace", "Smoker", "Campfire"
+    let ticks: Int                 // e.g. 200, 100, 600
+    let seconds: Double            // e.g. 10.0, 5.0, 30.0
+    let speedMultiplier: Double    // 1.0, 2.0, 0.33
+    let speedBadge: String         // "1× Speed", "2× Speed", "No Fuel Needed"
+    let fuelDescription: String    // "Requires standard furnace fuel", "Consumes fuel 2× faster", "No fuel required"
+    let stationDescription: String // Helper text
+    let xp: Double?                // e.g. 0.7, 0.35
+
+    init(
+        station: String,
+        baseTicks: Int = 200,
+        xp: Double? = nil
+    ) {
+        self.station = station
+        self.displayName = station
+        self.xp = xp
+
+        switch station {
+        case "Blast Furnace":
+            let actualTicks = max(1, baseTicks / 2)
+            self.ticks = actualTicks
+            self.seconds = Double(actualTicks) / 20.0
+            self.speedMultiplier = 2.0
+            self.speedBadge = "2× Speed"
+            self.fuelDescription = "Consumes fuel 2× faster"
+            self.stationDescription = "Smelts ores, raw metals, and metallic gear at double speed."
+
+        case "Smoker":
+            let actualTicks = max(1, baseTicks / 2)
+            self.ticks = actualTicks
+            self.seconds = Double(actualTicks) / 20.0
+            self.speedMultiplier = 2.0
+            self.speedBadge = "2× Speed"
+            self.fuelDescription = "Consumes fuel 2× faster"
+            self.stationDescription = "Cooks food items at double speed."
+
+        case "Campfire":
+            let actualTicks = 600
+            self.ticks = actualTicks
+            self.seconds = Double(actualTicks) / 20.0
+            self.speedMultiplier = 1.0 / 3.0
+            self.speedBadge = "No Fuel Needed"
+            self.fuelDescription = "Infinite cooking without fuel"
+            self.stationDescription = "Cooks up to 4 food items simultaneously over an open flame without fuel."
+
+        default: // "Furnace"
+            self.ticks = baseTicks
+            self.seconds = Double(baseTicks) / 20.0
+            self.speedMultiplier = 1.0
+            self.speedBadge = "Standard Speed"
+            self.fuelDescription = "Requires standard furnace fuel"
+            self.stationDescription = "Versatile smelting and cooking for ores, blocks, and food."
+        }
+    }
+}
+
 struct CraftingVariant: Codable, Equatable, Hashable {
     let ingredients: [String]
     let output: Int
     let imageremark: String?
     let remarks: String?
+    let stations: [String]?
+
+    init(
+        ingredients: [String],
+        output: Int,
+        imageremark: String?,
+        remarks: String?,
+        stations: [String]? = nil
+    ) {
+        self.ingredients = ingredients
+        self.output = output
+        self.imageremark = imageremark
+        self.remarks = remarks
+        self.stations = stations
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ingredients, output, imageremark, remarks, stations
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.ingredients = try container.decode([String].self, forKey: .ingredients)
+        self.output = try container.decode(Int.self, forKey: .output)
+        self.imageremark = try container.decodeIfPresent(String.self, forKey: .imageremark)
+        self.remarks = try container.decodeIfPresent(String.self, forKey: .remarks)
+        self.stations = try container.decodeIfPresent([String].self, forKey: .stations)
+    }
+
+    var resolvedStations: [String] {
+        if let stations, !stations.isEmpty {
+            return stations
+        }
+        if let st = imageremark?.trimmingCharacters(in: .whitespacesAndNewlines), !st.isEmpty {
+            return [st]
+        }
+        return []
+    }
 
     var isCookingLayout: Bool {
-        guard let station = imageremark else { return false }
-        return ["Furnace", "Blast Furnace", "Smoker", "Campfire"].contains(station)
+        let cookingSet: Set<String> = ["Furnace", "Blast Furnace", "Smoker", "Campfire"]
+        if let imageremark, cookingSet.contains(imageremark) {
+            return true
+        }
+        for st in resolvedStations {
+            if cookingSet.contains(st) {
+                return true
+            }
+        }
+        return false
     }
 
     var normalizedIngredients: [String] {
@@ -162,6 +269,43 @@ struct CraftingVariant: Codable, Equatable, Hashable {
             return ingredients + Array(repeating: "", count: maximum - ingredients.count)
         }
         return Array(ingredients.prefix(maximum))
+    }
+
+    var parsedXP: Double? {
+        guard let remarks else { return nil }
+        if let match = remarks.range(of: #"XP:\s*([\d\.]+)"#, options: .regularExpression) {
+            let str = remarks[match].replacingOccurrences(of: "XP:", with: "").trimmingCharacters(in: .whitespaces)
+            return Double(str)
+        }
+        return nil
+    }
+
+    var parsedBaseTicks: Int {
+        guard let remarks else { return 200 }
+        if let match = remarks.range(of: #"Cooking Time:\s*(\d+)\s*ticks"#, options: .regularExpression) {
+            let digits = remarks[match].filter { $0.isNumber }
+            if let val = Int(digits), val > 0 {
+                if val == 600 { return 200 }
+                return val
+            }
+        }
+        return 200
+    }
+
+    var cookingStationInfos: [CookingStationInfo] {
+        guard isCookingLayout else { return [] }
+        let baseTicks = parsedBaseTicks
+        let xp = parsedXP
+        var list = resolvedStations.filter {
+            ["Furnace", "Blast Furnace", "Smoker", "Campfire"].contains($0)
+        }
+        if list.isEmpty, let imageremark, ["Furnace", "Blast Furnace", "Smoker", "Campfire"].contains(imageremark) {
+            list = [imageremark]
+        }
+        list.sort { (Recipe.stationPriority[$0] ?? 99) < (Recipe.stationPriority[$1] ?? 99) }
+        return list.map {
+            CookingStationInfo(station: $0, baseTicks: baseTicks, xp: $0 == "Campfire" ? nil : xp)
+        }
     }
 }
 
@@ -236,7 +380,7 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         case category, imageremark, remarks, variants
     }
 
-    private static let stationPriority: [String: Int] = [
+    static let stationPriority: [String: Int] = [
         "Crafting Table": 0,
         "Stonecutter": 1,
         "Smithing Table": 2,
@@ -246,48 +390,105 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         "Campfire": 6
     ]
 
-    var resolvedVariants: [CraftingVariant] {
-        if let variants, !variants.isEmpty {
-            return variants
-        }
-        var list: [CraftingVariant] = [
-            CraftingVariant(
-                ingredients: ingredients,
-                output: output,
-                imageremark: imageremark,
-                remarks: remarks
-            )
-        ]
-        let altPairs: [([String]?, Int?)] = [
-            (alternateIngredients, alternateOutput),
-            (alternateIngredients1, alternateOutput1),
-            (alternateIngredients2, alternateOutput2),
-            (alternateIngredients3, alternateOutput3)
-        ]
-        for (altIngs, altOut) in altPairs {
-            if let altIngs, !altIngs.isEmpty {
-                list.append(
-                    CraftingVariant(
-                        ingredients: altIngs,
-                        output: altOut ?? output,
-                        imageremark: imageremark,
-                        remarks: remarks
-                    )
-                )
+    static func mergeCookingVariants(_ variants: [CraftingVariant]) -> [CraftingVariant] {
+        var nonCooking: [CraftingVariant] = []
+        var cookingMap: [String: (variant: CraftingVariant, stations: [String], remarks: String?)] = [:]
+        var cookingOrder: [String] = []
+
+        for v in variants {
+            if v.isCookingLayout {
+                let key = v.normalizedIngredients.prefix(2).joined(separator: "|") + "@\(v.output)"
+                if var entry = cookingMap[key] {
+                    for st in v.resolvedStations {
+                        if !entry.stations.contains(st) {
+                            entry.stations.append(st)
+                        }
+                    }
+                    entry.stations.sort { (stationPriority[$0] ?? 99) < (stationPriority[$1] ?? 99) }
+                    if entry.remarks == nil || entry.remarks?.isEmpty == true {
+                        entry.remarks = v.remarks
+                    }
+                    cookingMap[key] = entry
+                } else {
+                    var initialStations = v.resolvedStations
+                    if initialStations.isEmpty, let st = v.imageremark {
+                        initialStations = [st]
+                    }
+                    initialStations.sort { (stationPriority[$0] ?? 99) < (stationPriority[$1] ?? 99) }
+                    cookingMap[key] = (variant: v, stations: initialStations, remarks: v.remarks)
+                    cookingOrder.append(key)
+                }
+            } else {
+                if !nonCooking.contains(v) {
+                    nonCooking.append(v)
+                }
             }
         }
-        return list
+
+        var result = nonCooking
+        for key in cookingOrder {
+            if let entry = cookingMap[key] {
+                let primaryStation = entry.stations.first ?? entry.variant.imageremark ?? "Furnace"
+                let merged = CraftingVariant(
+                    ingredients: entry.variant.ingredients,
+                    output: entry.variant.output,
+                    imageremark: primaryStation,
+                    remarks: entry.remarks ?? entry.variant.remarks,
+                    stations: entry.stations
+                )
+                result.append(merged)
+            }
+        }
+        return result
+    }
+
+    var resolvedVariants: [CraftingVariant] {
+        let baseList: [CraftingVariant]
+        if let variants, !variants.isEmpty {
+            baseList = variants
+        } else {
+            var list: [CraftingVariant] = [
+                CraftingVariant(
+                    ingredients: ingredients,
+                    output: output,
+                    imageremark: imageremark,
+                    remarks: remarks
+                )
+            ]
+            let altPairs: [([String]?, Int?)] = [
+                (alternateIngredients, alternateOutput),
+                (alternateIngredients1, alternateOutput1),
+                (alternateIngredients2, alternateOutput2),
+                (alternateIngredients3, alternateOutput3)
+            ]
+            for (altIngs, altOut) in altPairs {
+                if let altIngs, !altIngs.isEmpty {
+                    list.append(
+                        CraftingVariant(
+                            ingredients: altIngs,
+                            output: altOut ?? output,
+                            imageremark: imageremark,
+                            remarks: remarks
+                        )
+                    )
+                }
+            }
+            baseList = list
+        }
+
+        return Self.mergeCookingVariants(baseList)
     }
 
     var craftingUtilities: [String] {
         var seen = Set<String>()
         var utilities: [String] = []
         for variant in resolvedVariants {
-            if let station = variant.imageremark?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !station.isEmpty,
-               !seen.contains(station) {
-                seen.insert(station)
-                utilities.append(station)
+            for station in variant.resolvedStations {
+                let trimmed = station.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty, !seen.contains(trimmed) {
+                    seen.insert(trimmed)
+                    utilities.append(trimmed)
+                }
             }
         }
         if utilities.isEmpty,
@@ -322,7 +523,26 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         for (index, itemName) in sortedNames.enumerated() {
             guard let group = grouped[itemName], !group.isEmpty else { continue }
             if group.count == 1, let single = group.first, single.variants != nil {
-                mergedList.append(single)
+                let mergedVariants = mergeCookingVariants(single.resolvedVariants)
+                let firstVar = mergedVariants.first ?? CraftingVariant(
+                    ingredients: single.ingredients,
+                    output: single.output,
+                    imageremark: single.imageremark,
+                    remarks: single.remarks
+                )
+                mergedList.append(
+                    Recipe(
+                        id: single.id,
+                        name: single.name,
+                        image: single.image,
+                        ingredients: firstVar.ingredients,
+                        output: firstVar.output,
+                        category: single.category,
+                        imageremark: firstVar.imageremark,
+                        remarks: firstVar.remarks,
+                        variants: mergedVariants
+                    )
+                )
                 continue
             }
 
@@ -334,14 +554,13 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
             }
             let primary = sortedGroup[0]
 
-            var uniqueVariants: [CraftingVariant] = []
+            var allVariants: [CraftingVariant] = []
             for r in sortedGroup {
                 for v in r.resolvedVariants {
-                    if !uniqueVariants.contains(v) {
-                        uniqueVariants.append(v)
-                    }
+                    allVariants.append(v)
                 }
             }
+            let uniqueVariants = mergeCookingVariants(allVariants)
 
             let firstVar = uniqueVariants.first ?? CraftingVariant(
                 ingredients: primary.ingredients,

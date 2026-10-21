@@ -229,9 +229,12 @@ def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> Optiona
         cooking_time = raw_data.get("cookingtime")
         xp = raw_data.get("experience")
         remarks_parts = []
-        if cooking_time:
-            remarks_parts.append(f"Cooking Time: {cooking_time} ticks")
-        if xp:
+        if cooking_time is not None:
+            actual_ticks = cooking_time
+            if imageremark in ["Blast Furnace", "Smoker"] and actual_ticks == 200:
+                actual_ticks = 100
+            remarks_parts.append(f"Cooking Time: {actual_ticks} ticks")
+        if xp is not None:
             remarks_parts.append(f"XP: {xp}")
         remarks = ", ".join(remarks_parts)
 
@@ -630,34 +633,63 @@ def create_recipe_package(
     for next_id, item_name in enumerate(sorted(grouped_by_name.keys()), start=1):
         group = grouped_by_name[item_name]
         group.sort(key=lambda r: (station_priority.get(r.get("imageremark") or "", 99), -int(r.get("output") or 1), r.get("ingredients") or []))
-        primary = group[0]
-        variants = [
-            {
-                "ingredients": r["ingredients"],
-                "output": r["output"],
-                "imageremark": r["imageremark"],
-                "remarks": r["remarks"],
-            }
-            for r in group
-        ]
+
+        # Merge cooking variants that share the same input ingredient and output
+        cooking_map = {}
+        merged_variants = []
+        for r in group:
+            st = r.get("imageremark")
+            if st in ["Furnace", "Blast Furnace", "Smoker", "Campfire"]:
+                cook_key = (tuple(r.get("ingredients")[:2]), r.get("output"))
+                if cook_key in cooking_map:
+                    entry = cooking_map[cook_key]
+                    if st not in entry["stations"]:
+                        entry["stations"].append(st)
+                        entry["stations"].sort(key=lambda s: station_priority.get(s, 99))
+                    if not entry.get("remarks") and r.get("remarks"):
+                        entry["remarks"] = r["remarks"]
+                else:
+                    v_dict = {
+                        "ingredients": r["ingredients"],
+                        "output": r["output"],
+                        "imageremark": st,
+                        "remarks": r["remarks"],
+                        "stations": [st],
+                    }
+                    cooking_map[cook_key] = v_dict
+                    merged_variants.append(v_dict)
+            else:
+                merged_variants.append({
+                    "ingredients": r["ingredients"],
+                    "output": r["output"],
+                    "imageremark": r["imageremark"],
+                    "remarks": r["remarks"],
+                    "stations": [r["imageremark"]] if r.get("imageremark") else [],
+                })
+
+        for v in merged_variants:
+            if v.get("stations"):
+                v["imageremark"] = v["stations"][0]
+
+        primary = merged_variants[0]
         merged = {
             "id": next_id,
-            "name": primary["name"],
-            "image": primary["image"],
+            "name": group[0]["name"],
+            "image": group[0]["image"],
             "ingredients": primary["ingredients"],
-            "alternateIngredients": group[1]["ingredients"] if len(group) > 1 else None,
-            "alternateIngredients1": group[2]["ingredients"] if len(group) > 2 else None,
-            "alternateIngredients2": group[3]["ingredients"] if len(group) > 3 else None,
-            "alternateIngredients3": group[4]["ingredients"] if len(group) > 4 else None,
+            "alternateIngredients": merged_variants[1]["ingredients"] if len(merged_variants) > 1 else None,
+            "alternateIngredients1": merged_variants[2]["ingredients"] if len(merged_variants) > 2 else None,
+            "alternateIngredients2": merged_variants[3]["ingredients"] if len(merged_variants) > 3 else None,
+            "alternateIngredients3": merged_variants[4]["ingredients"] if len(merged_variants) > 4 else None,
             "output": primary["output"],
-            "alternateOutput": group[1]["output"] if len(group) > 1 else None,
-            "alternateOutput1": group[2]["output"] if len(group) > 2 else None,
-            "alternateOutput2": group[3]["output"] if len(group) > 3 else None,
-            "alternateOutput3": group[4]["output"] if len(group) > 4 else None,
-            "category": primary["category"],
+            "alternateOutput": merged_variants[1]["output"] if len(merged_variants) > 1 else None,
+            "alternateOutput1": merged_variants[2]["output"] if len(merged_variants) > 2 else None,
+            "alternateOutput2": merged_variants[3]["output"] if len(merged_variants) > 3 else None,
+            "alternateOutput3": merged_variants[4]["output"] if len(merged_variants) > 4 else None,
+            "category": group[0]["category"],
             "imageremark": primary["imageremark"],
             "remarks": primary["remarks"],
-            "variants": variants,
+            "variants": merged_variants,
         }
         processed_recipes.append(merged)
 
