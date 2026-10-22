@@ -748,9 +748,9 @@ struct RecipeAlphabetIndexBar: View {
     let onSelectLetter: (String) -> Void
     var onEndScrubbing: (() -> Void)? = nil
 
-    @State private var activeIndex: Int?
+    @State private var activeIndex: Int = 0
     @State private var isTouching = false
-    @State private var indicatorY: CGFloat = 0
+    @State private var dragY: CGFloat = 0
     @State private var lastScrolledLetter: String?
 
     var body: some View {
@@ -759,16 +759,15 @@ struct RecipeAlphabetIndexBar: View {
             let showDots = totalHeight >= 470
             let letterHeight: CGFloat = showDots ? 12 : max(9, min(14, (totalHeight - 16) / CGFloat(alphabet.count)))
             let dotHeight: CGFloat = 5
-            let stepHeight: CGFloat = letterHeight + (showDots ? dotHeight : 0)
             let barContentHeight = CGFloat(alphabet.count) * letterHeight
                 + (showDots ? CGFloat(alphabet.count - 1) * dotHeight : 0)
                 + 12
 
             ZStack(alignment: .topTrailing) {
                 // Floating HUD letter callout badge directly bound to the touch position
-                if isTouching, let idx = activeIndex, alphabet.indices.contains(idx) {
-                    let letter = alphabet[idx]
-                    let bubbleCenterY = max(26, min(indicatorY, barContentHeight - 26))
+                if isTouching {
+                    let letter = alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : (alphabet.first ?? "A")
+                    let bubbleCenterY = max(26, min(dragY, barContentHeight - 26))
 
                     HStack(spacing: 4) {
                         ZStack {
@@ -795,7 +794,7 @@ struct RecipeAlphabetIndexBar: View {
                     .allowsHitTesting(false)
                 }
 
-                // Index track: compressed/pressed slightly toward the far right edge when scrubbing (not hidden)
+                // Index track: pressed slightly toward the far right edge when scrubbing (all letters remain visible)
                 IndexBarStaticTrack(
                     alphabet: alphabet,
                     availableLetters: availableLetters,
@@ -813,19 +812,17 @@ struct RecipeAlphabetIndexBar: View {
                     Capsule()
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                 )
-                .offset(x: isTouching ? 6 : 0)
-                .scaleEffect(x: isTouching ? 0.90 : 1.0, anchor: .trailing)
-                .opacity(isTouching ? 0.85 : 1.0)
-                .animation(.spring(response: 0.22, dampingFraction: 0.8), value: isTouching)
+                .offset(x: isTouching ? 2.5 : 0)
+                .animation(.spring(response: 0.22, dampingFraction: 0.82), value: isTouching)
                 .contentShape(Rectangle())
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .local)
                         .onChanged { value in
                             let usableHeight = max(barContentHeight - 12, 1)
-                            let y = value.location.y - 6
+                            let clampedY = max(6, min(value.location.y, barContentHeight - 6))
+                            let y = clampedY - 6
                             let ratio = min(max(y / usableHeight, 0), 0.9999)
                             let index = Int(ratio * CGFloat(alphabet.count))
-                            let targetY = CGFloat(index) * stepHeight + letterHeight * 0.5 + 6
 
                             if !isTouching {
                                 HapticFeedback.prepareSelection()
@@ -834,9 +831,7 @@ struct RecipeAlphabetIndexBar: View {
                                 }
                             }
 
-                            withAnimation(.interactiveSpring(response: 0.12, dampingFraction: 0.82)) {
-                                indicatorY = targetY
-                            }
+                            dragY = clampedY
 
                             if activeIndex != index {
                                 activeIndex = index
@@ -851,7 +846,6 @@ struct RecipeAlphabetIndexBar: View {
                         .onEnded { _ in
                             withAnimation(.spring(response: 0.22, dampingFraction: 0.85)) {
                                 isTouching = false
-                                activeIndex = nil
                             }
                             lastScrolledLetter = nil
                             onEndScrubbing?()
@@ -938,16 +932,14 @@ struct RecipeCell: View, Equatable {
     private var pickContent: some View {
         VStack(alignment: .center, spacing: 6) {
             ZStack(alignment: .topLeading) {
-                recipeImage(size: horizontalSizeClass == .regular ? 76 : 68)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                recipeImage(size: horizontalSizeClass == .regular ? 96 : 82)
+                    .frame(maxWidth: .infinity, alignment: .center)
                 CraftifyStatusPill(title: "Pick", symbol: "sparkles")
-                    .padding(8)
+                    .padding(6)
             }
-            .frame(height: horizontalSizeClass == .regular ? 94 : 84)
-            .padding(.top, 4)
-            .padding(.horizontal, 8)
+            .frame(maxWidth: .infinity)
 
-            VStack(alignment: .center, spacing: 4) {
+            VStack(alignment: .center, spacing: 3) {
                 Text(recipe.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
@@ -959,7 +951,7 @@ struct RecipeCell: View, Equatable {
 
                 if !recipe.category.isEmpty {
                     Text(recipe.category)
-                        .font(.caption2)
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                         .multilineTextAlignment(.center)
@@ -971,10 +963,14 @@ struct RecipeCell: View, Equatable {
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.bottom, 10)
         }
-        .frame(width: dynamicTypeSize.isAccessibilitySize ? 260 : (horizontalSizeClass == .regular ? 192 : 166))
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(
+            width: dynamicTypeSize.isAccessibilitySize ? 280 : (horizontalSizeClass == .regular ? 220 : 188),
+            height: horizontalSizeClass == .regular ? 280 : 250,
+            alignment: .center
+        )
     }
 
     private func craftingUtilityIconsRow(iconSize: CGFloat) -> some View {
