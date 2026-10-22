@@ -765,29 +765,37 @@ struct RecipeAlphabetIndexBar: View {
                 + 12
 
             ZStack(alignment: .topTrailing) {
-                // Floating HUD callout bubble (iOS native style, appears to the left of the bar)
+                // Floating HUD letter callout badge directly bound to the touch position
                 if isTouching, let idx = activeIndex, alphabet.indices.contains(idx) {
                     let letter = alphabet[idx]
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(.ultraThickMaterial)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
-                            }
-                            .shadow(color: Color.black.opacity(0.16), radius: 8, x: -3, y: 3)
+                    let bubbleCenterY = max(26, min(indicatorY, barContentHeight - 26))
 
-                        Text(letter)
-                            .font(.system(size: 26, weight: .bold, design: .rounded))
-                            .foregroundStyle(accent)
+                    HStack(spacing: 4) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                .fill(.ultraThickMaterial)
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                                        .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
+                                }
+                                .shadow(color: Color.black.opacity(0.18), radius: 10, x: -4, y: 4)
+
+                            Text(letter)
+                                .font(.system(size: 28, weight: .bold, design: .rounded))
+                                .foregroundStyle(accent)
+                        }
+                        .frame(width: 52, height: 52)
+
+                        Circle()
+                            .fill(accent)
+                            .frame(width: 5, height: 5)
                     }
-                    .frame(width: 50, height: 50)
-                    .offset(x: -36, y: max(0, min(indicatorY - 25, barContentHeight - 50)))
-                    .transition(.scale(scale: 0.75).combined(with: .opacity))
+                    .offset(x: -30, y: bubbleCenterY - 26)
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
                     .allowsHitTesting(false)
                 }
 
-                // Index track
+                // Index track: compressed/pressed slightly toward the far right edge when scrubbing (not hidden)
                 IndexBarStaticTrack(
                     alphabet: alphabet,
                     availableLetters: availableLetters,
@@ -797,22 +805,6 @@ struct RecipeAlphabetIndexBar: View {
                     dotHeight: dotHeight
                 )
                 .equatable()
-                .overlay(alignment: .top) {
-                    if isTouching, let idx = activeIndex, alphabet.indices.contains(idx) {
-                        let letter = alphabet[idx]
-                        ZStack {
-                            Circle()
-                                .fill(accent)
-                                .frame(width: 16, height: 16)
-                            Text(letter)
-                                .font(.system(size: 10, weight: .heavy, design: .rounded))
-                                .foregroundStyle(Color.white)
-                        }
-                        .frame(width: 18, height: 18)
-                        .offset(y: indicatorY - 9)
-                        .allowsHitTesting(false)
-                    }
-                }
                 .padding(.vertical, 6)
                 .padding(.horizontal, 2)
                 .frame(width: 22, height: barContentHeight)
@@ -821,6 +813,10 @@ struct RecipeAlphabetIndexBar: View {
                     Capsule()
                         .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
                 )
+                .offset(x: isTouching ? 6 : 0)
+                .scaleEffect(x: isTouching ? 0.90 : 1.0, anchor: .trailing)
+                .opacity(isTouching ? 0.85 : 1.0)
+                .animation(.spring(response: 0.22, dampingFraction: 0.8), value: isTouching)
                 .contentShape(Rectangle())
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -940,17 +936,18 @@ struct RecipeCell: View, Equatable {
     }
 
     private var pickContent: some View {
-        VStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .center, spacing: 6) {
             ZStack(alignment: .topLeading) {
-                recipeImage(size: horizontalSizeClass == .regular ? 96 : 82)
+                recipeImage(size: horizontalSizeClass == .regular ? 76 : 68)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(10)
                 CraftifyStatusPill(title: "Pick", symbol: "sparkles")
-                    .padding(9)
+                    .padding(8)
             }
-            .frame(height: horizontalSizeClass == .regular ? 142 : 124)
+            .frame(height: horizontalSizeClass == .regular ? 94 : 84)
+            .padding(.top, 4)
+            .padding(.horizontal, 8)
 
-            VStack(alignment: .center, spacing: 6) {
+            VStack(alignment: .center, spacing: 4) {
                 Text(recipe.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
@@ -960,22 +957,24 @@ struct RecipeCell: View, Equatable {
                     .frame(height: threeLinesHeadlineHeight, alignment: .center)
                     .frame(maxWidth: .infinity, alignment: .center)
 
-                Text(recipe.category)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity, alignment: .center)
+                if !recipe.category.isEmpty {
+                    Text(recipe.category)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
 
                 if !recipe.craftingUtilities.isEmpty {
                     craftingUtilityIconsRow(iconSize: 18)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 10)
+            .padding(.bottom, 10)
         }
-        .frame(width: dynamicTypeSize.isAccessibilitySize ? 280 : (horizontalSizeClass == .regular ? 220 : 188))
+        .frame(width: dynamicTypeSize.isAccessibilitySize ? 260 : (horizontalSizeClass == .regular ? 192 : 166))
     }
 
     private func craftingUtilityIconsRow(iconSize: CGFloat) -> some View {
