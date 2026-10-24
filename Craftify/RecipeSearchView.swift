@@ -43,7 +43,7 @@ struct RecipeSearchView: View {
         return target.range(of: query, options: [.caseInsensitive, .diacriticInsensitive]) != nil
     }
 
-    private var matchingRecipes: [Recipe] {
+    private func computeMatchingRecipes() -> [Recipe] {
         let query = trimmedQuery
         guard !query.isEmpty else { return [] }
 
@@ -63,20 +63,6 @@ struct RecipeSearchView: View {
         }
     }
 
-    private var groupedMatchingRecipes: [String: [Recipe]] {
-        Dictionary(grouping: matchingRecipes) {
-            String($0.name.prefix(1)).uppercased()
-        }
-    }
-
-    private var sortedAvailableLetters: [String] {
-        groupedMatchingRecipes.keys.sorted()
-    }
-
-    private var availableLettersSet: Set<String> {
-        Set(groupedMatchingRecipes.keys)
-    }
-
     private var isSingleColumn: Bool {
         horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize
     }
@@ -94,21 +80,44 @@ struct RecipeSearchView: View {
 
     private static let scrollSpaceName = "CraftifySearchScrollSpace"
 
-    private var sectionsLayout: RecipeSectionsLayout {
-        RecipeSectionsLayout(
-            sortedLetters: sortedAvailableLetters,
-            groupedRecipes: groupedMatchingRecipes,
-            isSingleColumn: isSingleColumn,
-            rowHeight: RecipeRowMetrics.rowHeight(for: dynamicTypeSize)
-        )
-    }
-
+    @State private var cachedLayout: RecipeSectionsLayout = .empty
+    @State private var cachedResultCount: Int = 0
     @State private var measuredScrollY: CGFloat = 0
     @State private var jumpTargetY: CGFloat?
     @State private var viewportHeight: CGFloat = 850
+    @State private var lastJumpTarget: String?
+
+    private func rebuildSearchLayout() {
+        let matches = computeMatchingRecipes()
+        cachedResultCount = matches.count
+        guard !matches.isEmpty else {
+            cachedLayout = .empty
+            measuredScrollY = 0
+            jumpTargetY = nil
+            lastJumpTarget = nil
+            return
+        }
+        let grouped = Dictionary(grouping: matches) {
+            String($0.name.prefix(1)).uppercased()
+        }
+        let sorted = grouped.keys.sorted()
+        let newLayout = RecipeSectionsLayout(
+            sortedLetters: sorted,
+            groupedRecipes: grouped,
+            isSingleColumn: isSingleColumn,
+            rowHeight: RecipeRowMetrics.rowHeight(for: dynamicTypeSize)
+        )
+        cachedLayout = newLayout
+        let maxScroll = max(0, newLayout.totalHeight - viewportHeight)
+        if measuredScrollY > maxScroll {
+            measuredScrollY = maxScroll
+        }
+        jumpTargetY = nil
+        lastJumpTarget = nil
+    }
 
     var body: some View {
-        let layout = sectionsLayout
+        let layout = cachedLayout
 
         NavigationStack(path: $navigationPath) {
             ScrollViewReader { proxy in
@@ -122,7 +131,7 @@ struct RecipeSearchView: View {
                                 title: "Start Searching",
                                 detail: "Enter an item or recipe name to find matching recipes."
                             )
-                        } else if matchingRecipes.isEmpty {
+                        } else if cachedResultCount == 0 {
                             searchState(
                                 symbol: "magnifyingglass",
                                 title: "No Recipes Found",
@@ -136,7 +145,7 @@ struct RecipeSearchView: View {
                     .padding(.leading, CraftifyLayout.pagePadding(for: horizontalSizeClass))
                     .padding(
                         .trailing,
-                        CraftifyLayout.pagePadding(for: horizontalSizeClass) + (matchingRecipes.isEmpty ? 0 : 26)
+                        CraftifyLayout.pagePadding(for: horizontalSizeClass) + (cachedResultCount == 0 ? 0 : 26)
                     )
                     .padding(.top, 12)
                     .padding(.bottom, 34)
@@ -148,59 +157,48 @@ struct RecipeSearchView: View {
                         if containerH > 100, abs(containerH - viewportHeight) > 1 {
                             viewportHeight = containerH
                         }
-                        if let targetY = jumpTargetY {
-                            if abs(newOffset - targetY) <= 450 {
-                                measuredScrollY = newOffset
-                            }
-                        } else if abs(newOffset - measuredScrollY) >= 48 {
+                        if jumpTargetY == nil, abs(newOffset - measuredScrollY) >= RecipeRowMetrics.scrollUpdateThreshold {
                             measuredScrollY = newOffset
                         }
                     }
                 )
                 .onPreferenceChange(RecipeSectionsScrollOffsetKey.self) { newOffset in
                     guard #unavailable(iOS 18.0) else { return }
-                    if let targetY = jumpTargetY {
-                        if abs(newOffset - targetY) <= 450 {
-                            measuredScrollY = newOffset
-                        }
-                    } else if abs(newOffset - measuredScrollY) >= 48 {
+                    if jumpTargetY == nil, abs(newOffset - measuredScrollY) >= RecipeRowMetrics.scrollUpdateThreshold {
                         measuredScrollY = newOffset
                     }
                 }
-                .onChange(of: layout.totalHeight) { _, newTotal in
-                    let maxScroll = max(0, newTotal - viewportHeight)
-                    if measuredScrollY > maxScroll {
-                        measuredScrollY = maxScroll
-                    }
-                    jumpTargetY = nil
-                }
                 .overlay(alignment: .trailing) {
-                    if !matchingRecipes.isEmpty {
+                    if cachedResultCount > 0 {
                         RecipeAlphabetIndexBar(
                             alphabet: Self.alphabet,
-                            availableLetters: availableLettersSet,
+                            availableLetters: layout.availableLettersSet,
                             accent: accent,
                             onSelectLetter: { selectedLetter in
-                                if let target = resolveScrollTarget(for: selectedLetter),
-                                   let section = layout.sectionsByLetter[target] {
-                                    let clampedY = min(
-                                        section.relMinY,
-                                        max(0, layout.totalHeight - viewportHeight)
-                                    )
-                                    var transaction = Transaction()
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        jumpTargetY = clampedY
-                                        measuredScrollY = clampedY
-                                        proxy.scrollTo(target, anchor: .top)
-                                    }
+                                guard let target = resolveScrollTarget(for: selectedLetter, in: layout),
+                                      lastJumpTarget != target,
+                                      let section = layout.sectionsByLetter[target] else {
+                                    return
+                                }
+                                lastJumpTarget = target
+                                let clampedY = min(
+                                    section.relMinY,
+                                    max(0, layout.totalHeight - viewportHeight)
+                                )
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    jumpTargetY = clampedY
+                                    measuredScrollY = clampedY
+                                    proxy.scrollTo(target, anchor: .top)
                                 }
                             },
                             onEndScrubbing: {
-                                if let targetY = jumpTargetY, abs(measuredScrollY - targetY) > 450 {
+                                if let targetY = jumpTargetY {
                                     measuredScrollY = targetY
                                 }
                                 jumpTargetY = nil
+                                lastJumpTarget = nil
                             }
                         )
                         .padding(.trailing, 2)
@@ -246,6 +244,22 @@ struct RecipeSearchView: View {
                 dataManager.syncChests()
                 dataManager.syncRecentSearches()
                 dataManager.fetchRecipes(isManual: false)
+                rebuildSearchLayout()
+            }
+            .onChange(of: searchText) { _, _ in
+                rebuildSearchLayout()
+            }
+            .onChange(of: searchFilter) { _, _ in
+                rebuildSearchLayout()
+            }
+            .onChange(of: dataManager.recipes) { _, _ in
+                rebuildSearchLayout()
+            }
+            .onChange(of: isSingleColumn) { _, _ in
+                rebuildSearchLayout()
+            }
+            .onChange(of: dynamicTypeSize) { _, _ in
+                rebuildSearchLayout()
             }
             .navigationDestination(for: Recipe.self) { recipe in
                 RecipeDetailView(recipe: recipe, navigationPath: $navigationPath)
@@ -257,10 +271,10 @@ struct RecipeSearchView: View {
         }
     }
 
-    private func resolveScrollTarget(for letter: String) -> String? {
-        let sorted = sortedAvailableLetters
+    private func resolveScrollTarget(for letter: String, in layout: RecipeSectionsLayout) -> String? {
+        let sorted = layout.sortedLetters
         guard !sorted.isEmpty else { return nil }
-        if availableLettersSet.contains(letter) {
+        if layout.availableLettersSet.contains(letter) {
             return letter
         }
         if let next = sorted.first(where: { $0 >= letter }) {
@@ -321,7 +335,7 @@ struct RecipeSearchView: View {
             }
             Spacer()
             CraftifyStatusPill(
-                title: "\(resultCount) found",
+                title: "\(cachedResultCount) found",
                 symbol: "magnifyingglass"
             )
         }
@@ -333,18 +347,7 @@ struct RecipeSearchView: View {
             viewportHeight: viewportHeight,
             accent: accent
         )
-        .background(
-            GeometryReader { geo in
-                Color.clear.preference(
-                    key: RecipeSectionsScrollOffsetKey.self,
-                    value: -geo.frame(in: .named(Self.scrollSpaceName)).minY
-                )
-            }
-        )
-    }
-
-    private var resultCount: Int {
-        matchingRecipes.count
+        .modifier(RecipeLegacyScrollOffsetReporter(scrollSpaceName: Self.scrollSpaceName))
     }
 
     private func searchState(symbol: String, title: String, detail: String) -> some View {
@@ -439,7 +442,7 @@ struct RecentSearchesList: View {
                 NavigationLink(value: recipe) {
                     RecentSearchItem(recipe: recipe)
                 }
-                .buttonStyle(RecipeInteractiveButtonStyle())
+                .buttonStyle(.plain)
             }
         }
     }

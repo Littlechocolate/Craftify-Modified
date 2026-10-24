@@ -328,6 +328,10 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
     let remarks: String?
     let variants: [CraftingVariant]?
 
+    let resolvedVariants: [CraftingVariant]
+    let craftingUtilities: [String]
+    let allIngredientNames: [String]
+
     init(
         id: Int,
         name: String,
@@ -364,6 +368,78 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         self.imageremark = imageremark
         self.remarks = remarks
         self.variants = variants
+
+        let resolved = Self.computeResolvedVariants(
+            ingredients: ingredients,
+            output: output,
+            imageremark: imageremark,
+            remarks: remarks,
+            alternateIngredients: alternateIngredients,
+            alternateOutput: alternateOutput,
+            alternateIngredients1: alternateIngredients1,
+            alternateOutput1: alternateOutput1,
+            alternateIngredients2: alternateIngredients2,
+            alternateOutput2: alternateOutput2,
+            alternateIngredients3: alternateIngredients3,
+            alternateOutput3: alternateOutput3,
+            variants: variants
+        )
+        self.resolvedVariants = resolved
+        self.craftingUtilities = Self.computeCraftingUtilities(from: resolved, fallbackImageremark: imageremark)
+        self.allIngredientNames = Self.computeAllIngredientNames(from: resolved)
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let id = try container.decode(Int.self, forKey: .id)
+        let name = try container.decode(String.self, forKey: .name)
+        let image = try container.decode(String.self, forKey: .image)
+        let ingredients = try container.decode([String].self, forKey: .ingredients)
+        let alternateIngredients = try container.decodeIfPresent([String].self, forKey: .alternateIngredients)
+        let alternateIngredients1 = try container.decodeIfPresent([String].self, forKey: .alternateIngredients1)
+        let alternateIngredients2 = try container.decodeIfPresent([String].self, forKey: .alternateIngredients2)
+        let alternateIngredients3 = try container.decodeIfPresent([String].self, forKey: .alternateIngredients3)
+        let output = try container.decode(Int.self, forKey: .output)
+        let alternateOutput = try container.decodeIfPresent(Int.self, forKey: .alternateOutput)
+        let alternateOutput1 = try container.decodeIfPresent(Int.self, forKey: .alternateOutput1)
+        let alternateOutput2 = try container.decodeIfPresent(Int.self, forKey: .alternateOutput2)
+        let alternateOutput3 = try container.decodeIfPresent(Int.self, forKey: .alternateOutput3)
+        let category = try container.decode(String.self, forKey: .category)
+        let imageremark = try container.decodeIfPresent(String.self, forKey: .imageremark)
+        let remarks = try container.decodeIfPresent(String.self, forKey: .remarks)
+        let variants = try container.decodeIfPresent([CraftingVariant].self, forKey: .variants)
+
+        self.init(
+            id: id,
+            name: name,
+            image: image,
+            ingredients: ingredients,
+            alternateIngredients: alternateIngredients,
+            alternateIngredients1: alternateIngredients1,
+            alternateIngredients2: alternateIngredients2,
+            alternateIngredients3: alternateIngredients3,
+            output: output,
+            alternateOutput: alternateOutput,
+            alternateOutput1: alternateOutput1,
+            alternateOutput2: alternateOutput2,
+            alternateOutput3: alternateOutput3,
+            category: category,
+            imageremark: imageremark,
+            remarks: remarks,
+            variants: variants
+        )
+    }
+
+    static func == (lhs: Recipe, rhs: Recipe) -> Bool {
+        lhs.id == rhs.id
+            && lhs.name == rhs.name
+            && lhs.category == rhs.category
+            && lhs.variants?.count == rhs.variants?.count
+    }
+
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+        hasher.combine(name)
     }
 
     enum CodingKeys: String, CodingKey {
@@ -442,7 +518,21 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         return result
     }
 
-    var resolvedVariants: [CraftingVariant] {
+    private static func computeResolvedVariants(
+        ingredients: [String],
+        output: Int,
+        imageremark: String?,
+        remarks: String?,
+        alternateIngredients: [String]?,
+        alternateOutput: Int?,
+        alternateIngredients1: [String]?,
+        alternateOutput1: Int?,
+        alternateIngredients2: [String]?,
+        alternateOutput2: Int?,
+        alternateIngredients3: [String]?,
+        alternateOutput3: Int?,
+        variants: [CraftingVariant]?
+    ) -> [CraftingVariant] {
         let baseList: [CraftingVariant]
         if let variants, !variants.isEmpty {
             baseList = variants
@@ -479,7 +569,10 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         return Self.mergeCookingVariants(baseList)
     }
 
-    var craftingUtilities: [String] {
+    private static func computeCraftingUtilities(
+        from resolvedVariants: [CraftingVariant],
+        fallbackImageremark: String?
+    ) -> [String] {
         var seen = Set<String>()
         var utilities: [String] = []
         for variant in resolvedVariants {
@@ -492,7 +585,7 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
             }
         }
         if utilities.isEmpty,
-           let fallback = imageremark?.trimmingCharacters(in: .whitespacesAndNewlines),
+           let fallback = fallbackImageremark?.trimmingCharacters(in: .whitespacesAndNewlines),
            !fallback.isEmpty {
             utilities.append(fallback)
         }
@@ -501,7 +594,7 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         }
     }
 
-    var allIngredientNames: [String] {
+    private static func computeAllIngredientNames(from resolvedVariants: [CraftingVariant]) -> [String] {
         var result: [String] = []
         for variant in resolvedVariants {
             for ing in variant.ingredients where !ing.isEmpty {

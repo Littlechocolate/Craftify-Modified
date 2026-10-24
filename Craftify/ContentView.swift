@@ -260,7 +260,9 @@ enum RecipeRowMetrics {
     static let headerBottomSpacing: CGFloat = 10
     static let rowSpacing: CGFloat = 12
     static let sectionSpacing: CGFloat = 24
-    static let viewportBuffer: CGFloat = 1200
+    static let viewportBuffer: CGFloat = 720
+    static let scrubBuffer: CGFloat = 360
+    static let scrollUpdateThreshold: CGFloat = 140
 
     static func rowHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
@@ -301,14 +303,38 @@ struct RecipeScrollViewportTracker: ViewModifier {
     }
 }
 
-struct RecipeSectionLayoutItem: Identifiable {
+struct RecipeLegacyScrollOffsetReporter: ViewModifier {
+    let scrollSpaceName: String
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if #available(iOS 18.0, *) {
+            content
+        } else {
+            content.background(
+                GeometryReader { geo in
+                    Color.clear.preference(
+                        key: RecipeSectionsScrollOffsetKey.self,
+                        value: -geo.frame(in: .named(scrollSpaceName)).minY
+                    )
+                }
+            )
+        }
+    }
+}
+
+struct RecipeSectionLayoutItem: Identifiable, Equatable {
+    let id: UUID = UUID()
     let letter: String
     let rows: [[Recipe]]
     let relMinY: CGFloat
     let height: CGFloat
 
-    var id: String { letter }
     var relMaxY: CGFloat { relMinY + height }
+
+    static func == (lhs: RecipeSectionLayoutItem, rhs: RecipeSectionLayoutItem) -> Bool {
+        lhs.id == rhs.id
+    }
 
     func visibleRowRange(
         minY: CGFloat,
@@ -327,12 +353,26 @@ struct RecipeSectionLayoutItem: Identifiable {
     }
 }
 
-struct RecipeSectionsLayout {
+struct RecipeSectionsLayout: Equatable {
+    let id: UUID = UUID()
+    let sortedLetters: [String]
+    let availableLettersSet: Set<String>
     let sections: [RecipeSectionLayoutItem]
     let sectionsByLetter: [String: RecipeSectionLayoutItem]
     let totalHeight: CGFloat
     let rowHeight: CGFloat
     let isSingleColumn: Bool
+
+    static let empty = RecipeSectionsLayout(
+        sortedLetters: [],
+        groupedRecipes: [:],
+        isSingleColumn: true,
+        rowHeight: 108
+    )
+
+    static func == (lhs: RecipeSectionsLayout, rhs: RecipeSectionsLayout) -> Bool {
+        lhs.id == rhs.id
+    }
 
     init(
         sortedLetters: [String],
@@ -340,6 +380,8 @@ struct RecipeSectionsLayout {
         isSingleColumn: Bool,
         rowHeight: CGFloat
     ) {
+        self.sortedLetters = sortedLetters
+        self.availableLettersSet = Set(sortedLetters)
         self.isSingleColumn = isSingleColumn
         self.rowHeight = rowHeight
         let columnsCount = isSingleColumn ? 1 : 2
@@ -392,6 +434,107 @@ struct RecipeSectionsScrollOffsetKey: PreferenceKey {
 }
 
 @MainActor
+private struct RecipeVirtualizedRowView: View, Equatable {
+    let rowIndex: Int
+    let rowRecipes: [Recipe]
+    let isSingleColumn: Bool
+    let rowHeight: CGFloat
+
+    static func == (lhs: RecipeVirtualizedRowView, rhs: RecipeVirtualizedRowView) -> Bool {
+        lhs.rowIndex == rhs.rowIndex
+            && lhs.isSingleColumn == rhs.isSingleColumn
+            && lhs.rowHeight == rhs.rowHeight
+            && lhs.rowRecipes == rhs.rowRecipes
+    }
+
+    var body: some View {
+        Group {
+            if isSingleColumn {
+                if let recipe = rowRecipes.first {
+                    NavigationLink(value: recipe) {
+                        RecipeCell(recipe: recipe, isCraftifyPick: false)
+                            .equatable()
+                    }
+                    .buttonStyle(.plain)
+                }
+            } else {
+                HStack(spacing: 16) {
+                    ForEach(rowRecipes) { recipe in
+                        NavigationLink(value: recipe) {
+                            RecipeCell(recipe: recipe, isCraftifyPick: false)
+                                .equatable()
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
+                    }
+                    if rowRecipes.count == 1 {
+                        Color.clear
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+            }
+        }
+        .frame(height: rowHeight)
+    }
+}
+
+@MainActor
+private struct RecipeVirtualizedSectionView: View, Equatable {
+    let section: RecipeSectionLayoutItem
+    let visibleRange: Range<Int>?
+    let rowHeight: CGFloat
+    let isSingleColumn: Bool
+    let accent: Color
+
+    static func == (lhs: RecipeVirtualizedSectionView, rhs: RecipeVirtualizedSectionView) -> Bool {
+        lhs.section.id == rhs.section.id
+            && lhs.visibleRange == rhs.visibleRange
+            && lhs.rowHeight == rhs.rowHeight
+            && lhs.isSingleColumn == rhs.isSingleColumn
+            && lhs.accent == rhs.accent
+    }
+
+    var body: some View {
+        let rowStride = rowHeight + RecipeRowMetrics.rowSpacing
+
+        VStack(alignment: .leading, spacing: 0) {
+            Text(section.letter)
+                .font(.title2.bold())
+                .foregroundStyle(accent)
+                .frame(height: RecipeRowMetrics.headerHeight, alignment: .leading)
+                .padding(.bottom, RecipeRowMetrics.headerBottomSpacing)
+                .accessibilityAddTraits(.isHeader)
+
+            if let visibleRange {
+                if visibleRange.lowerBound > 0 {
+                    Color.clear
+                        .frame(height: CGFloat(visibleRange.lowerBound) * rowStride)
+                }
+
+                VStack(alignment: .leading, spacing: RecipeRowMetrics.rowSpacing) {
+                    ForEach(visibleRange, id: \.self) { rowIdx in
+                        RecipeVirtualizedRowView(
+                            rowIndex: rowIdx,
+                            rowRecipes: section.rows[rowIdx],
+                            isSingleColumn: isSingleColumn,
+                            rowHeight: rowHeight
+                        )
+                        .equatable()
+                    }
+                }
+            }
+        }
+        .frame(
+            maxWidth: .infinity,
+            minHeight: section.height,
+            maxHeight: section.height,
+            alignment: .topLeading
+        )
+        .id(section.letter)
+    }
+}
+
+@MainActor
 struct RecipeVirtualizedSectionsView: View {
     let layout: RecipeSectionsLayout
     let measuredScrollY: CGFloat
@@ -411,97 +554,24 @@ struct RecipeVirtualizedSectionsView: View {
     }
 
     private func activeRowRange(for section: RecipeSectionLayoutItem) -> Range<Int>? {
-        let buffer = RecipeRowMetrics.viewportBuffer
-        let mMin = effectiveMeasuredY - buffer
-        let mMax = effectiveMeasuredY + viewportHeight + buffer
-
-        if let jY = effectiveJumpY {
-            let jMin = jY - buffer
-            let jMax = jY + viewportHeight + buffer
-            let jRange = section.visibleRowRange(minY: jMin, maxY: jMax, rowHeight: layout.rowHeight)
-            let mRange = section.visibleRowRange(minY: mMin, maxY: mMax, rowHeight: layout.rowHeight)
-            switch (jRange, mRange) {
-            case let (.some(jr), .some(mr)):
-                if abs(jr.lowerBound - mr.lowerBound) <= 24 {
-                    return min(jr.lowerBound, mr.lowerBound) ..< max(jr.upperBound, mr.upperBound)
-                }
-                return jr
-            case let (.some(jr), .none):
-                return jr
-            case let (.none, .some(mr)):
-                return mr
-            case (.none, .none):
-                return nil
-            }
-        } else {
-            return section.visibleRowRange(minY: mMin, maxY: mMax, rowHeight: layout.rowHeight)
-        }
+        let centerTopY = effectiveJumpY ?? effectiveMeasuredY
+        let buffer = effectiveJumpY != nil ? RecipeRowMetrics.scrubBuffer : RecipeRowMetrics.viewportBuffer
+        let minY = centerTopY - buffer
+        let maxY = centerTopY + viewportHeight + buffer
+        return section.visibleRowRange(minY: minY, maxY: maxY, rowHeight: layout.rowHeight)
     }
 
     var body: some View {
-        let rowStride = layout.rowHeight + RecipeRowMetrics.rowSpacing
-
         VStack(alignment: .leading, spacing: RecipeRowMetrics.sectionSpacing) {
             ForEach(layout.sections) { section in
-                let visibleRange = activeRowRange(for: section)
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(section.letter)
-                        .font(.title2.bold())
-                        .foregroundStyle(accent)
-                        .frame(height: RecipeRowMetrics.headerHeight, alignment: .leading)
-                        .padding(.bottom, RecipeRowMetrics.headerBottomSpacing)
-                        .accessibilityAddTraits(.isHeader)
-
-                    if let visibleRange {
-                        if visibleRange.lowerBound > 0 {
-                            Color.clear
-                                .frame(height: CGFloat(visibleRange.lowerBound) * rowStride)
-                        }
-
-                        VStack(alignment: .leading, spacing: RecipeRowMetrics.rowSpacing) {
-                            ForEach(visibleRange, id: \.self) { rowIdx in
-                                rowView(for: section.rows[rowIdx])
-                                    .frame(height: layout.rowHeight)
-                            }
-                        }
-                    }
-                }
-                .frame(
-                    maxWidth: .infinity,
-                    minHeight: section.height,
-                    maxHeight: section.height,
-                    alignment: .topLeading
+                RecipeVirtualizedSectionView(
+                    section: section,
+                    visibleRange: activeRowRange(for: section),
+                    rowHeight: layout.rowHeight,
+                    isSingleColumn: layout.isSingleColumn,
+                    accent: accent
                 )
-                .id(section.letter)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func rowView(for rowRecipes: [Recipe]) -> some View {
-        if layout.isSingleColumn {
-            if let recipe = rowRecipes.first {
-                NavigationLink(value: recipe) {
-                    RecipeCell(recipe: recipe, isCraftifyPick: false)
-                        .equatable()
-                }
-                .buttonStyle(RecipeInteractiveButtonStyle())
-            }
-        } else {
-            HStack(spacing: 16) {
-                ForEach(rowRecipes) { recipe in
-                    NavigationLink(value: recipe) {
-                        RecipeCell(recipe: recipe, isCraftifyPick: false)
-                            .equatable()
-                    }
-                    .buttonStyle(RecipeInteractiveButtonStyle())
-                    .frame(maxWidth: .infinity)
-                }
-                if rowRecipes.count == 1 {
-                    Color.clear
-                        .frame(maxWidth: .infinity)
-                }
+                .equatable()
             }
         }
     }
@@ -520,42 +590,48 @@ struct RecipeListView: View {
     private static let alphabet: [String] = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZ").map(String.init)
     private static let scrollSpaceName = "CraftifyRecipeListScrollSpace"
 
-    private var sortedAvailableLetters: [String] {
-        filteredRecipes.keys.sorted()
-    }
-
-    private var availableLettersSet: Set<String> {
-        Set(filteredRecipes.keys)
-    }
-
     private var isSingleColumn: Bool {
         horizontalSizeClass == .compact || dynamicTypeSize.isAccessibilitySize
     }
 
-    private var sectionsLayout: RecipeSectionsLayout {
-        RecipeSectionsLayout(
-            sortedLetters: sortedAvailableLetters,
+    private var estimatedTopContentHeight: CGFloat {
+        guard !recommendedRecipes.isEmpty else { return 8 }
+        if isCraftifyPicksExpanded {
+            return (horizontalSizeClass == .regular ? 280 : 250) + 88
+        } else {
+            return 52 + 24
+        }
+    }
+
+    @State private var cachedLayout: RecipeSectionsLayout?
+    @State private var measuredScrollY: CGFloat = 0
+    @State private var jumpTargetY: CGFloat?
+    @State private var viewportHeight: CGFloat = 850
+    @State private var lastJumpTarget: String?
+
+    private func buildLayout() -> RecipeSectionsLayout {
+        let sorted = filteredRecipes.keys.sorted()
+        return RecipeSectionsLayout(
+            sortedLetters: sorted,
             groupedRecipes: filteredRecipes,
             isSingleColumn: isSingleColumn,
             rowHeight: RecipeRowMetrics.rowHeight(for: dynamicTypeSize)
         )
     }
 
-    private var estimatedTopContentHeight: CGFloat {
-        guard !recommendedRecipes.isEmpty else { return 8 }
-        if isCraftifyPicksExpanded {
-            return (horizontalSizeClass == .regular ? 280 : 250) + 24
-        } else {
-            return 52 + 24
+    private func rebuildLayout() {
+        let newLayout = buildLayout()
+        cachedLayout = newLayout
+        let maxScroll = max(0, newLayout.totalHeight - viewportHeight)
+        if measuredScrollY > maxScroll {
+            measuredScrollY = maxScroll
         }
+        jumpTargetY = nil
+        lastJumpTarget = nil
     }
 
-    @State private var measuredScrollY: CGFloat = 0
-    @State private var jumpTargetY: CGFloat?
-    @State private var viewportHeight: CGFloat = 850
-
     var body: some View {
-        let layout = sectionsLayout
+        let layout = cachedLayout ?? buildLayout()
 
         Group {
             if dataManager.recipes.isEmpty {
@@ -575,14 +651,7 @@ struct RecipeListView: View {
                                 viewportHeight: viewportHeight,
                                 accent: accent
                             )
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(
-                                        key: RecipeSectionsScrollOffsetKey.self,
-                                        value: -geo.frame(in: .named(Self.scrollSpaceName)).minY
-                                    )
-                                }
-                            )
+                            .modifier(RecipeLegacyScrollOffsetReporter(scrollSpaceName: Self.scrollSpaceName))
                         }
                         .craftifyContentWidth()
                         .padding(.leading, CraftifyLayout.pagePadding(for: horizontalSizeClass))
@@ -597,58 +666,47 @@ struct RecipeListView: View {
                             if containerH > 100, abs(containerH - viewportHeight) > 1 {
                                 viewportHeight = containerH
                             }
-                            if let targetY = jumpTargetY {
-                                if abs(newOffset - targetY) <= 450 {
-                                    measuredScrollY = newOffset
-                                }
-                            } else if abs(newOffset - measuredScrollY) >= 48 {
+                            if jumpTargetY == nil, abs(newOffset - measuredScrollY) >= RecipeRowMetrics.scrollUpdateThreshold {
                                 measuredScrollY = newOffset
                             }
                         }
                     )
                     .onPreferenceChange(RecipeSectionsScrollOffsetKey.self) { newOffset in
                         guard #unavailable(iOS 18.0) else { return }
-                        if let targetY = jumpTargetY {
-                            if abs(newOffset - targetY) <= 450 {
-                                measuredScrollY = newOffset
-                            }
-                        } else if abs(newOffset - measuredScrollY) >= 48 {
+                        if jumpTargetY == nil, abs(newOffset - measuredScrollY) >= RecipeRowMetrics.scrollUpdateThreshold {
                             measuredScrollY = newOffset
                         }
-                    }
-                    .onChange(of: layout.totalHeight) { _, newTotal in
-                        let maxScroll = max(0, newTotal - viewportHeight)
-                        if measuredScrollY > maxScroll {
-                            measuredScrollY = maxScroll
-                        }
-                        jumpTargetY = nil
                     }
                     .overlay(alignment: .trailing) {
                         RecipeAlphabetIndexBar(
                             alphabet: Self.alphabet,
-                            availableLetters: availableLettersSet,
+                            availableLetters: layout.availableLettersSet,
                             accent: accent,
                             onSelectLetter: { selectedLetter in
-                                if let target = resolveScrollTarget(for: selectedLetter),
-                                   let section = layout.sectionsByLetter[target] {
-                                    let clampedY = min(
-                                        section.relMinY,
-                                        max(0, layout.totalHeight - viewportHeight)
-                                    )
-                                    var transaction = Transaction()
-                                    transaction.disablesAnimations = true
-                                    withTransaction(transaction) {
-                                        jumpTargetY = clampedY
-                                        measuredScrollY = clampedY
-                                        proxy.scrollTo(target, anchor: .top)
-                                    }
+                                guard let target = resolveScrollTarget(for: selectedLetter, in: layout),
+                                      lastJumpTarget != target,
+                                      let section = layout.sectionsByLetter[target] else {
+                                    return
+                                }
+                                lastJumpTarget = target
+                                let clampedY = min(
+                                    section.relMinY,
+                                    max(0, layout.totalHeight - viewportHeight)
+                                )
+                                var transaction = Transaction()
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    jumpTargetY = clampedY
+                                    measuredScrollY = clampedY
+                                    proxy.scrollTo(target, anchor: .top)
                                 }
                             },
                             onEndScrubbing: {
-                                if let targetY = jumpTargetY, abs(measuredScrollY - targetY) > 450 {
+                                if let targetY = jumpTargetY {
                                     measuredScrollY = targetY
                                 }
                                 jumpTargetY = nil
+                                lastJumpTarget = nil
                             }
                         )
                         .padding(.trailing, 2)
@@ -657,12 +715,26 @@ struct RecipeListView: View {
                 }
             }
         }
+        .onAppear {
+            if cachedLayout == nil {
+                cachedLayout = buildLayout()
+            }
+        }
+        .onChange(of: filteredRecipes) { _, _ in
+            rebuildLayout()
+        }
+        .onChange(of: isSingleColumn) { _, _ in
+            rebuildLayout()
+        }
+        .onChange(of: dynamicTypeSize) { _, _ in
+            rebuildLayout()
+        }
     }
 
-    private func resolveScrollTarget(for letter: String) -> String? {
-        let sorted = sortedAvailableLetters
+    private func resolveScrollTarget(for letter: String, in layout: RecipeSectionsLayout) -> String? {
+        let sorted = layout.sortedLetters
         guard !sorted.isEmpty else { return nil }
-        if availableLettersSet.contains(letter) {
+        if layout.availableLettersSet.contains(letter) {
             return letter
         }
         if let next = sorted.first(where: { $0 >= letter }) {
@@ -685,6 +757,7 @@ struct RecipeListView: View {
                         ForEach(recommendedRecipes) { recipe in
                             NavigationLink(value: recipe) {
                                 RecipeCell(recipe: recipe, isCraftifyPick: true)
+                                    .equatable()
                             }
                             .buttonStyle(RecipeInteractiveButtonStyle())
                         }
@@ -703,46 +776,68 @@ private struct IndexBarStaticTrack: View, Equatable {
     let alphabet: [String]
     let availableLetters: Set<String>
     let accent: Color
-    let activeLetter: String?
-    let showDots: Bool
     let letterHeight: CGFloat
-    let dotHeight: CGFloat
 
     static func == (lhs: IndexBarStaticTrack, rhs: IndexBarStaticTrack) -> Bool {
         lhs.availableLetters == rhs.availableLetters
-            && lhs.showDots == rhs.showDots
             && lhs.letterHeight == rhs.letterHeight
             && lhs.accent == rhs.accent
-            && lhs.activeLetter == rhs.activeLetter
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(Array(alphabet.enumerated()), id: \.offset) { idx, letter in
+            ForEach(alphabet, id: \.self) { letter in
                 let isAvailable = availableLetters.contains(letter)
-                let isActive = letter == activeLetter
 
-                ZStack {
-                    if isActive {
-                        Circle()
-                            .fill(accent)
-                            .frame(width: 14, height: 14)
-                    }
-
-                    Text(letter)
-                        .font(.system(size: showDots ? 10 : 9.5, weight: isActive ? .heavy : (isAvailable ? .bold : .medium), design: .rounded))
-                        .foregroundStyle(isActive ? Color.white : (isAvailable ? accent : Color.secondary.opacity(0.38)))
-                }
-                .frame(width: 18, height: letterHeight)
-
-                if showDots && idx < alphabet.count - 1 {
-                    Text("·")
-                        .font(.system(size: 7.5, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color.secondary.opacity(0.42))
-                        .frame(width: 18, height: dotHeight)
-                }
+                Text(letter)
+                    .font(.system(size: 10, weight: isAvailable ? .bold : .semibold, design: .rounded))
+                    .foregroundStyle(isAvailable ? accent : Color.secondary.opacity(0.35))
+                    .frame(width: 18, height: letterHeight)
             }
         }
+    }
+}
+
+private struct IndexCalloutShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let r = rect.height / 2
+        let center = CGPoint(x: r, y: r)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.width, y: r))
+        path.addArc(
+            center: center,
+            radius: r,
+            startAngle: .degrees(38),
+            endAngle: .degrees(322),
+            clockwise: false
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+@MainActor
+private struct IndexCalloutView: View {
+    let letter: String
+    let accent: Color
+
+    var body: some View {
+        ZStack {
+            IndexCalloutShape()
+                .fill(Color(uiColor: .secondarySystemGroupedBackground))
+                .overlay(
+                    IndexCalloutShape()
+                        .strokeBorder(accent.opacity(0.28), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.16), radius: 8, x: -2, y: 3)
+
+            Text(letter)
+                .font(.system(size: 23, weight: .bold, design: .rounded))
+                .foregroundStyle(accent)
+                .offset(x: -3)
+                .transaction { $0.animation = nil }
+        }
+        .frame(width: 50, height: 44)
     }
 }
 
@@ -759,117 +854,118 @@ struct RecipeAlphabetIndexBar: View {
     @State private var dragY: CGFloat = 0
     @State private var lastScrolledLetter: String?
 
+    private let trackVerticalPadding: CGFloat = 5
+
     var body: some View {
         GeometryReader { geo in
             let totalHeight = max(geo.size.height, 260)
-            let showDots = totalHeight >= 470
-            let letterHeight: CGFloat = showDots ? 12 : max(9, min(14, (totalHeight - 16) / CGFloat(alphabet.count)))
-            let dotHeight: CGFloat = 5
-            let barContentHeight = CGFloat(alphabet.count) * letterHeight
-                + (showDots ? CGFloat(alphabet.count - 1) * dotHeight : 0)
-                + 12
+            let letterHeight = max(11, min(14, floor((totalHeight - 16) / CGFloat(alphabet.count))))
+            let barContentHeight = CGFloat(alphabet.count) * letterHeight + trackVerticalPadding * 2
 
-            ZStack(alignment: .topTrailing) {
-                // Floating HUD letter callout badge directly bound to the touch position
-                if isTouching {
-                    let letter = alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : (alphabet.first ?? "A")
-                    let bubbleCenterY = max(26, min(dragY, barContentHeight - 26))
-
-                    HStack(spacing: 5) {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .fill(.ultraThickMaterial)
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                        .stroke(Color.primary.opacity(0.12), lineWidth: 0.5)
-                                }
-                                .shadow(color: Color.black.opacity(0.18), radius: 10, x: -4, y: 4)
-
-                            Text(letter)
-                                .font(.system(size: 28, weight: .bold, design: .rounded))
-                                .foregroundStyle(accent)
-                        }
-                        .frame(width: 52, height: 52)
-
+            IndexBarStaticTrack(
+                alphabet: alphabet,
+                availableLetters: availableLetters,
+                accent: accent,
+                letterHeight: letterHeight
+            )
+            .equatable()
+            .padding(.vertical, trackVerticalPadding)
+            .frame(width: 18, height: barContentHeight)
+            .overlay(alignment: .top) {
+                if isTouching, alphabet.indices.contains(activeIndex) {
+                    ZStack {
                         Circle()
                             .fill(accent)
-                            .frame(width: 5, height: 5)
+                            .frame(width: 15, height: 15)
+
+                        Text(alphabet[activeIndex])
+                            .font(.system(size: 10, weight: .heavy, design: .rounded))
+                            .foregroundStyle(Color.white)
                     }
-                    .frame(width: 62, height: 52)
-                    .offset(x: -30, y: bubbleCenterY - 26)
-                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    .frame(width: 18, height: letterHeight)
+                    .offset(y: trackVerticalPadding + CGFloat(activeIndex) * letterHeight)
+                    .transaction { $0.animation = nil }
                     .allowsHitTesting(false)
-                    .animation(.interactiveSpring(response: 0.12, dampingFraction: 0.85), value: dragY)
                 }
-
-                // Index track: pressed slightly toward the far right edge when scrubbing (all letters remain visible)
-                IndexBarStaticTrack(
-                    alphabet: alphabet,
-                    availableLetters: availableLetters,
-                    accent: accent,
-                    activeLetter: isTouching && alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : nil,
-                    showDots: showDots,
-                    letterHeight: letterHeight,
-                    dotHeight: dotHeight
-                )
-                .equatable()
-                .padding(.vertical, 6)
-                .padding(.horizontal, 2)
-                .frame(width: 22, height: barContentHeight)
-                .background(
-                    Capsule()
-                        .fill(Color(uiColor: .systemBackground).opacity(isTouching ? 0.95 : 0.82))
-                        .background(.ultraThinMaterial, in: Capsule())
-                )
-                .overlay(
-                    Capsule()
-                        .strokeBorder(Color.primary.opacity(isTouching ? 0.16 : 0.08), lineWidth: 0.5)
-                )
-                .shadow(color: Color.black.opacity(isTouching ? 0.12 : 0.05), radius: 4, x: -1, y: 2)
-                .offset(x: isTouching ? 2 : 0)
-                .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.82), value: isTouching)
-                .frame(width: 32, alignment: .trailing)
-                .contentShape(Rectangle())
-                .highPriorityGesture(
-                    DragGesture(minimumDistance: 0, coordinateSpace: .local)
-                        .onChanged { value in
-                            let usableHeight = max(barContentHeight - 12, 1)
-                            let clampedY = max(6, min(value.location.y, barContentHeight - 6))
-                            let y = clampedY - 6
-                            let ratio = min(max(y / usableHeight, 0), 0.9999)
-                            let index = min(max(Int(ratio * CGFloat(alphabet.count)), 0), alphabet.count - 1)
-
-                            if !isTouching {
-                                HapticFeedback.prepareSelection()
-                                withAnimation(.spring(response: 0.18, dampingFraction: 0.82)) {
-                                    isTouching = true
-                                }
-                            }
-
-                            dragY = clampedY
-
-                            if activeIndex != index {
-                                activeIndex = index
-                                let letter = alphabet[index]
-                                HapticFeedback.selection()
-                                if lastScrolledLetter != letter {
-                                    lastScrolledLetter = letter
-                                    onSelectLetter(letter)
-                                }
-                            }
-                        }
-                        .onEnded { _ in
-                            withAnimation(.spring(response: 0.22, dampingFraction: 0.85)) {
-                                isTouching = false
-                            }
-                            lastScrolledLetter = nil
-                            onEndScrubbing?()
-                        }
-                )
             }
+            .background(
+                Capsule()
+                    .fill(Color(uiColor: .secondarySystemGroupedBackground).opacity(isTouching ? 0.96 : 0.84))
+            )
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(isTouching ? 0.14 : 0.07), lineWidth: 0.5)
+            )
+            .shadow(color: Color.black.opacity(isTouching ? 0.10 : 0.04), radius: 3, x: -1, y: 1)
+            .offset(x: isTouching ? 1.5 : 0)
+            .animation(.interactiveSpring(response: 0.20, dampingFraction: 0.84), value: isTouching)
+            .overlay(alignment: .topLeading) {
+                if isTouching {
+                    let letter = alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : (alphabet.first ?? "A")
+                    IndexCalloutView(letter: letter, accent: accent)
+                        .offset(x: -54, y: dragY - 22)
+                        .transition(
+                            .asymmetric(
+                                insertion: .scale(scale: 0.65, anchor: .trailing).combined(with: .opacity),
+                                removal: .scale(scale: 0.8, anchor: .trailing).combined(with: .opacity)
+                            )
+                        )
+                        .allowsHitTesting(false)
+                }
+            }
+            .frame(width: 34, height: barContentHeight, alignment: .trailing)
+            .contentShape(Rectangle())
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { value in
+                        let usableHeight = max(barContentHeight - trackVerticalPadding * 2, 1)
+                        let minCenterY = trackVerticalPadding + letterHeight * 0.5
+                        let maxCenterY = barContentHeight - trackVerticalPadding - letterHeight * 0.5
+                        let clampedY = max(minCenterY, min(value.location.y, maxCenterY))
+                        let y = max(0, min(value.location.y - trackVerticalPadding, usableHeight - 0.001))
+                        let ratio = y / usableHeight
+                        let index = min(max(Int(ratio * CGFloat(alphabet.count)), 0), alphabet.count - 1)
+                        let letter = alphabet[index]
+
+                        if !isTouching {
+                            HapticFeedback.prepareSelection()
+                            var initTx = Transaction()
+                            initTx.disablesAnimations = true
+                            withTransaction(initTx) {
+                                dragY = clampedY
+                                activeIndex = index
+                            }
+                            withAnimation(.interactiveSpring(response: 0.18, dampingFraction: 0.82)) {
+                                isTouching = true
+                            }
+                            HapticFeedback.selection()
+                            lastScrolledLetter = letter
+                            onSelectLetter(letter)
+                            return
+                        }
+
+                        dragY = clampedY
+
+                        if activeIndex != index {
+                            activeIndex = index
+                            HapticFeedback.selection()
+                            if lastScrolledLetter != letter {
+                                lastScrolledLetter = letter
+                                onSelectLetter(letter)
+                            }
+                        }
+                    }
+                    .onEnded { _ in
+                        withAnimation(.interactiveSpring(response: 0.20, dampingFraction: 0.86)) {
+                            isTouching = false
+                        }
+                        lastScrolledLetter = nil
+                        onEndScrubbing?()
+                    }
+            )
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
-        .frame(width: 96)
+        .frame(width: 88)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Alphabetical recipe index, A to Z")
     }

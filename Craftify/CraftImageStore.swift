@@ -54,6 +54,8 @@ final class CraftImageStore: ObservableObject {
     private let versionIconsRootDirectory: URL
     private let legacyCacheDirectory: URL
     private let imageCache = NSCache<NSString, UIImage>()
+    private var fastImageCache: [String: UIImage] = [:]
+    private var missingKeys: Set<String> = []
     private var loadingKeys: Set<String> = []
     private var lastChecked: [String: Date] = [:]
     private var storageGeneration = 0
@@ -93,12 +95,19 @@ final class CraftImageStore: ObservableObject {
         imageCache.countLimit = 3000
     }
 
+    private func invalidateMemoryCaches() {
+        imageCache.removeAllObjects()
+        fastImageCache.removeAll(keepingCapacity: true)
+        missingKeys.removeAll(keepingCapacity: true)
+    }
+
     // MARK: - Per-Version Icon Isolation
 
     func setActiveVersion(_ version: String) {
         let trimmed = version.trimmingCharacters(in: .whitespacesAndNewlines)
         guard activeVersion != trimmed else { return }
         activeVersion = trimmed
+        invalidateMemoryCaches()
         objectWillChange.send()
     }
 
@@ -160,7 +169,7 @@ final class CraftImageStore: ObservableObject {
             }
         }
 
-        imageCache.removeAllObjects()
+        invalidateMemoryCaches()
         storageGeneration += 1
         objectWillChange.send()
         return storedCount
@@ -173,21 +182,38 @@ final class CraftImageStore: ObservableObject {
         if fileManager.fileExists(atPath: dir.path) {
             try? fileManager.removeItem(at: dir)
         }
-        imageCache.removeAllObjects()
+        invalidateMemoryCaches()
         objectWillChange.send()
     }
 
     // MARK: - Image Lookup
 
     func image(for assetKey: String, version: String? = nil) -> UIImage? {
-        let trimmedKey = assetKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedKey.isEmpty else { return nil }
+        let isDefaultVersion = (version == nil || version == activeVersion)
+        if isDefaultVersion {
+            if let fastHit = fastImageCache[assetKey] {
+                return fastHit
+            }
+            if missingKeys.contains(assetKey) {
+                return nil
+            }
+        }
 
-        let resolvedVersion = (version ?? activeVersion).trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = assetKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else {
+            if isDefaultVersion { missingKeys.insert(assetKey) }
+            return nil
+        }
+
+        let resolvedVersion = isDefaultVersion ? activeVersion : (version ?? activeVersion).trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedKey = CraftImageAssetKey.normalizedAssetKey(trimmedKey)
         let cacheKey = "\(resolvedVersion)::\(normalizedKey)" as NSString
 
         if let cached = imageCache.object(forKey: cacheKey) {
+            if isDefaultVersion {
+                if fastImageCache.count > 2500 { fastImageCache.removeAll(keepingCapacity: true) }
+                fastImageCache[assetKey] = cached
+            }
             return cached
         }
 
@@ -200,6 +226,7 @@ final class CraftImageStore: ObservableObject {
             )
             if let image = UIImage(contentsOfFile: normalizedFile.path) {
                 imageCache.setObject(image, forKey: cacheKey)
+                if isDefaultVersion { fastImageCache[assetKey] = image }
                 return image
             }
 
@@ -209,6 +236,7 @@ final class CraftImageStore: ObservableObject {
             )
             if let image = UIImage(contentsOfFile: exactFile.path) {
                 imageCache.setObject(image, forKey: cacheKey)
+                if isDefaultVersion { fastImageCache[assetKey] = image }
                 return image
             }
         }
@@ -216,15 +244,20 @@ final class CraftImageStore: ObservableObject {
         // 2. Fallback to persistent downloaded image directory
         if let image = UIImage(contentsOfFile: cachedFileURL(for: trimmedKey).path) {
             imageCache.setObject(image, forKey: cacheKey)
+            if isDefaultVersion { fastImageCache[assetKey] = image }
             return image
         }
 
         // 3. Fallback to bundled Assets.xcassets
         if let bundled = UIImage(named: trimmedKey) {
             imageCache.setObject(bundled, forKey: cacheKey)
+            if isDefaultVersion { fastImageCache[assetKey] = bundled }
             return bundled
         }
 
+        if isDefaultVersion {
+            missingKeys.insert(assetKey)
+        }
         return nil
     }
 
@@ -371,7 +404,7 @@ final class CraftImageStore: ObservableObject {
         storageGeneration += 1
         loadingKeys.removeAll()
         lastChecked.removeAll()
-        imageCache.removeAllObjects()
+        invalidateMemoryCaches()
 
         defaults.dictionaryRepresentation().keys
             .filter { $0.hasPrefix(Self.versionDefaultsPrefix) }
@@ -471,7 +504,7 @@ final class CraftImageStore: ObservableObject {
 
     private func removeCachedRemoteImage(for assetKey: String) {
         try? fileManager.removeItem(at: cachedFileURL(for: assetKey))
-        imageCache.removeAllObjects()
+        invalidateMemoryCaches()
         defaults.removeObject(forKey: versionDefaultsKey(for: assetKey))
     }
 }
@@ -479,9 +512,9 @@ final class CraftImageStore: ObservableObject {
 
 @MainActor
 struct CraftImage: View, Equatable {
-    @ObservedObject private var store: CraftImageStore
     let key: String
     let fallbackSystemName: String
+    private let store: CraftImageStore
 
     nonisolated static func == (lhs: CraftImage, rhs: CraftImage) -> Bool {
         lhs.key == rhs.key && lhs.fallbackSystemName == rhs.fallbackSystemName
@@ -494,7 +527,7 @@ struct CraftImage: View, Equatable {
     ) {
         self.key = key
         self.fallbackSystemName = fallbackSystemName
-        _store = ObservedObject(wrappedValue: store)
+        self.store = store
     }
 
     var body: some View {

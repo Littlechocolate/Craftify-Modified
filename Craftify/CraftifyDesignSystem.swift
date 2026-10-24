@@ -286,11 +286,10 @@ private struct CraftifyCardModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .background {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
-            }
+            .background(
+                Color(.secondarySystemGroupedBackground),
+                in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+            )
             .overlay {
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                     .strokeBorder(
@@ -305,17 +304,30 @@ private struct CraftifyAccentCardModifier: ViewModifier {
     let cornerRadius: CGFloat
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.craftifyAccentColor) private var accent
+    @Environment(\.colorScheme) private var colorScheme
 
     func body(content: Content) -> some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         content
             .background {
-                AppBackground()
-                    .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                    .shadow(color: .black.opacity(0.05), radius: 10, y: 4)
+                shape
+                    .fill(Color(.secondarySystemGroupedBackground))
+                    .overlay {
+                        shape.fill(
+                            LinearGradient(
+                                colors: [
+                                    accent.opacity(colorScheme == .dark ? 0.18 : 0.14),
+                                    accent.opacity(0.04),
+                                    Color.clear
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                    }
             }
-            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                shape
                     .strokeBorder(
                         accent.opacity(contrast == .increased ? 0.48 : 0.20),
                         lineWidth: contrast == .increased ? 1.5 : 1
