@@ -48,7 +48,7 @@ struct RecipeDetailView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 20) {
                 RecipeIdentityHeader(recipe: recipe, output: currentVariant.output)
 
                 CraftingRecipeCard(
@@ -284,7 +284,11 @@ private struct CraftingRecipeCard: View {
     @Environment(\.craftifyAccentColor) private var accent
 
     private var cellSize: CGFloat {
-        horizontalSizeClass == .regular ? 76 : 64
+        horizontalSizeClass == .regular ? 72 : 56
+    }
+
+    private var gridDimension: CGFloat {
+        3 * cellSize + 12
     }
 
     private var safeIndex: Int {
@@ -305,14 +309,11 @@ private struct CraftingRecipeCard: View {
     }
 
     private var layoutPageHeight: CGFloat {
-        let gridHeight = 3 * cellSize + 46
-        let usesVerticalFor3x3 = dynamicTypeSize.isAccessibilitySize || horizontalSizeClass != .regular
-        let has3x3Variant = variants.contains { !$0.isCookingLayout }
-        if usesVerticalFor3x3 && (has3x3Variant || dynamicTypeSize.isAccessibilitySize) {
+        if dynamicTypeSize.isAccessibilitySize {
             let outputHeight = cellSize + 44
-            return gridHeight + 54 + outputHeight + 36
+            return gridDimension + 54 + outputHeight + 48
         }
-        return gridHeight + 24
+        return gridDimension + 56
     }
 
     var body: some View {
@@ -325,7 +326,7 @@ private struct CraftingRecipeCard: View {
                         : "Tap an ingredient or the output to inspect it.",
                     symbol: activeVariant.isCookingLayout ? "flame.fill" : "square.grid.3x3.fill"
                 )
-                .contentTransition(.interpolate)
+                .contentTransition(.opacity)
 
                 if variants.count > 1 {
                     Spacer(minLength: 4)
@@ -394,7 +395,7 @@ private struct CraftingRecipeCard: View {
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .craftifyCard(cornerRadius: 24)
-        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: safeIndex)
+        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86), value: safeIndex)
     }
 
     @ViewBuilder
@@ -411,19 +412,18 @@ private struct CraftingRecipeCard: View {
 
     private func horizontalLayout(for variant: CraftingVariant) -> some View {
         VStack(spacing: 12) {
-            HStack(spacing: horizontalSizeClass == .regular ? 28 : 20) {
+            HStack(spacing: horizontalSizeClass == .regular ? 24 : 14) {
                 craftingGrid(for: variant)
+                    .frame(width: gridDimension, height: gridDimension)
                 Image(systemName: "arrow.right")
-                    .font(.title.bold())
+                    .font(.title2.bold())
                     .foregroundStyle(accent)
                     .accessibilityHidden(true)
                 outputTile(output: variant.output)
             }
             .frame(maxWidth: .infinity)
 
-            if variant.isCookingLayout {
-                cookingTimesComparisonBar(for: variant)
-            }
+            variantSummaryBar(for: variant)
         }
         .frame(maxWidth: .infinity)
     }
@@ -431,17 +431,77 @@ private struct CraftingRecipeCard: View {
     private func verticalLayout(for variant: CraftingVariant) -> some View {
         VStack(spacing: 14) {
             craftingGrid(for: variant)
+                .frame(width: gridDimension, height: gridDimension)
             Image(systemName: "arrow.down")
                 .font(.title2.bold())
                 .foregroundStyle(accent)
                 .accessibilityHidden(true)
             outputTile(output: variant.output)
 
-            if variant.isCookingLayout {
-                cookingTimesComparisonBar(for: variant)
-            }
+            variantSummaryBar(for: variant)
         }
         .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder
+    private func variantSummaryBar(for variant: CraftingVariant) -> some View {
+        if variant.isCookingLayout {
+            cookingTimesComparisonBar(for: variant)
+                .frame(height: 28)
+        } else {
+            craftingStationSummaryBar(for: variant)
+                .frame(height: 28)
+        }
+    }
+
+    private func craftingStationSummaryBar(for variant: CraftingVariant) -> some View {
+        let station = variant.resolvedStations.first ?? variant.imageremark ?? recipe.imageremark ?? "Crafting Table"
+        let isDyeing = variant.ingredients.contains { $0.hasPrefix("Any ") } && variant.ingredients.contains { $0.hasSuffix(" Dye") }
+        let modeBadge: (label: String, icon: String) = {
+            if isDyeing {
+                return ("Dyeing", "paintbrush.pointed.fill")
+            }
+            switch station {
+            case "Stonecutter":
+                return ("1:1 Cut", "scissors")
+            case "Smithing Table":
+                return ("Upgrade", "hammer.fill")
+            default:
+                return ("Direct Craft", "square.grid.3x3.fill")
+            }
+        }()
+
+        return HStack(spacing: 8) {
+            HStack(spacing: 5) {
+                CraftImage(key: station)
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+
+                Text(station)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.primary)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.04), in: Capsule())
+            .overlay(
+                Capsule()
+                    .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+            )
+
+            HStack(spacing: 4) {
+                Image(systemName: modeBadge.icon)
+                    .font(.system(size: 10, weight: .bold))
+                Text(modeBadge.label)
+                    .font(.caption2.weight(.semibold))
+            }
+            .foregroundStyle(accent)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(accent.opacity(0.09), in: Capsule())
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 2)
     }
 
     private func cookingTimesComparisonBar(for variant: CraftingVariant) -> some View {
@@ -563,11 +623,11 @@ private struct CraftingRecipeCard: View {
                         .font(.caption.bold())
                         .tracking(0.8)
                         .foregroundStyle(accent)
-                        .contentTransition(.interpolate)
+                        .contentTransition(.opacity)
                 }
 
                 VStack(spacing: 10) {
-                    // Slot 0: Primary Utility Card (Fixed relative position to header, dynamic in-place content replacement)
+                    // Slot 0: Primary Utility Card (Fixed relative position to header, uniform 3-row height across Crafting & Smelting)
                     UtilityCardView(item: primary)
 
                     // Additional utilities (e.g. Blast Furnace, Smoker, Campfire) expand smoothly downwards
@@ -648,6 +708,28 @@ struct UtilityCardView: View {
         }
     }
 
+    private func standardBadge(for station: String) -> (label: String, icon: String) {
+        switch station {
+        case "Stonecutter":
+            return ("1:1 Cut", "scissors")
+        case "Smithing Table":
+            return ("Upgrade", "hammer.fill")
+        default:
+            return ("3×3 Grid", "square.grid.3x3.fill")
+        }
+    }
+
+    private func standardFooter(for station: String) -> (label: String, icon: String) {
+        switch station {
+        case "Stonecutter":
+            return ("Instant stone & copper cutting", "cube.fill")
+        case "Smithing Table":
+            return ("Preserves enchantments & trims", "sparkles")
+        default:
+            return ("Instant crafting • No fuel required", "checkmark.circle.fill")
+        }
+    }
+
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             ZStack {
@@ -674,12 +756,12 @@ struct UtilityCardView: View {
                     Text(item.displayName)
                         .font(.headline)
                         .foregroundStyle(.primary)
-                        .id(item.displayName)
-                        .transition(.opacity)
+                        .contentTransition(.opacity)
 
                     Spacer(minLength: 4)
 
-                    if case .cooking(let info) = item {
+                    switch item {
+                    case .cooking(let info):
                         HStack(spacing: 4) {
                             Image(systemName: "clock.fill")
                                 .font(.caption2)
@@ -694,16 +776,29 @@ struct UtilityCardView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(accent.opacity(0.09), in: Capsule())
-                        .transition(reduceMotion ? .opacity : .scale(scale: 0.88).combined(with: .opacity))
+
+                    case .standard(let station, _):
+                        let badge = standardBadge(for: station)
+                        HStack(spacing: 4) {
+                            Image(systemName: badge.icon)
+                                .font(.caption2)
+                                .foregroundStyle(accent)
+                            Text(badge.label)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(accent.opacity(0.09), in: Capsule())
                     }
                 }
 
                 Text(descriptionText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                    .id(descriptionText)
-                    .transition(.opacity)
+                    .contentTransition(.opacity)
 
                 switch item {
                 case .cooking(let info):
@@ -722,17 +817,23 @@ struct UtilityCardView: View {
                         }
                     }
                     .padding(.top, 2)
-                    .transition(.opacity)
+                    .contentTransition(.opacity)
 
-                case .standard(_, let remarks):
+                case .standard(let station, let remarks):
                     if let remarks = remarks?.trimmingCharacters(in: .whitespacesAndNewlines), !remarks.isEmpty {
                         Text(remarks)
-                            .font(.caption.weight(.medium))
+                            .font(.caption2.weight(.medium))
                             .foregroundStyle(accent)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(1)
                             .padding(.top, 2)
-                            .id(remarks)
-                            .transition(.opacity)
+                            .contentTransition(.opacity)
+                    } else {
+                        let footer = standardFooter(for: station)
+                        Label(footer.label, systemImage: footer.icon)
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 2)
+                            .contentTransition(.opacity)
                     }
                 }
             }
@@ -775,7 +876,19 @@ struct IngredientDetailPopup: View {
 
     private var subRecipe: Recipe? {
         guard case .grid(_) = selectedItem else { return nil }
-        return dataManager.recipes.first { $0.name == detail }
+        if let exact = dataManager.recipes.first(where: { $0.name == detail }) {
+            return exact
+        }
+        if detail.hasPrefix("Any ") {
+            let baseFamily = String(detail.dropFirst(4))
+            if let baseRecipe = dataManager.recipes.first(where: { $0.name == baseFamily }) {
+                return baseRecipe
+            }
+            if let whiteVariant = dataManager.recipes.first(where: { $0.name == "White \(baseFamily)" }) {
+                return whiteVariant
+            }
+        }
+        return nil
     }
 
     private var descriptor: String {
@@ -858,10 +971,16 @@ struct IngredientDetailPopup: View {
             Text(detail)
                 .font(.title2.bold())
                 .fixedSize(horizontal: false, vertical: true)
-            Text(selectedItem == .output ? "The item produced by this recipe." : "An item required in the crafting layout.")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Text(
+                selectedItem == .output
+                    ? "The item produced by this recipe."
+                    : (detail.hasPrefix("Any ")
+                        ? "Any color variant of \(detail.dropFirst(4).lowercased()) can be dyed in this recipe."
+                        : "An item required in the crafting layout.")
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

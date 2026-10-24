@@ -1,8 +1,7 @@
-- **列表与搜索全链路性能优化（120fps 流畅滚动）**：
-  - 预计算 `Recipe` 的 `resolvedVariants`、`craftingUtilities` 与 `allIngredientNames` 并缓存为常量属性，消除每个配方卡片渲染时的重复合并、字符串处理与排序开销，并提供 $O(1)$ 的 `Equatable` / `Hashable` 实现。
-  - 在 `RecipeListView` 与 `RecipeSearchView` 中缓存 `RecipeSectionsLayout` 虚拟化布局与搜索过滤结果，避免滚动位置更新时重复分组、切片或重新过滤全部配方。
-  - 拆分独立的 `Equatable` 视图 `RecipeVirtualizedSectionView` 与 `RecipeVirtualizedRowView`，滚动时未变化的字母分区直接 $O(1)$ 跳过 Diff。
-  - 在 `CraftImageStore` 中新增一级内存字典缓存 `fastImageCache`，移除每个小图标上的 `@ObservedObject` 动态订阅风暴；精简推荐卡片背景修饰器，降低 GPU 离屏合成负载。
-- **右侧 A–Z 索引栏重构与 1:1 零延迟触控**：
-  - 移除字母间的 25 个圆点 `·`，采用清爽紧凑的 26 字母胶囊轨道，移除多层 `Material` 玻璃叠加冲突；按住滑动时右侧轨道微压且全部字母全程保持清晰可见。
-  - 全新水滴形悬浮标 `IndexCalloutView` 直接与轨道共享同一局部坐标系，按下瞬间无动画对齐落点，滑动时悬浮框与内部大字母完全绑定、1:1 零延迟同步移动。
+- **有色物品/方块配方彻底修复与顺序优化**：
+  - 彻底清除 `1.21.1.recipe`、`26w14a.recipe`、`26.3.recipe` 中所有空白合成表（包括 `Banner` 旗帜复制空白页、`Bundle` 收纳袋与 `Shulker Box` 潜影盒的 `crafting_transmute` 染色配方等）。
+  - 统一将所有可染色物品/方块（`Bed` 床、`Banner` 旗帜、`Bundle` 收纳袋、`Carpet` 地毯、`Cushion` 坐垫、`Harness` 鞍具、`Wool` 羊毛、`Wool Slab` / `Wool Stairs`、`Shulker Box` 潜影盒等）的**直接合成配方排在第一位（Variant 0）**，**染色合成配方排在第二位（Variant 1）**。
+- **全新多色融合图标（`Any <Family>`）**：
+  - 为每一类可通过染色改变颜色的物品/方块生成保留完整材质细节（如床的白色枕头与木质床腿、旗帜木杆、收纳袋束绳、鞍具皮革与护目镜等）的七彩融合图标（`Any Bed`、`Any Banner`、`Any Bundle`、`Any Carpet`、`Any Cushion`、`Any Wool`、`Any Harness`、`Any Shulker Box`、`Any Candle` 等），直观表示“任意颜色的该物品均可染色”，并支持在原料弹窗中一键跳转基础合成配方。
+- **工作台与熔炉等跨工作站布局滑动零跳跃**：
+  - 统一 `CraftingRecipeCard` 中 3×3 工作台网格与 1×3 熔炉网格的尺寸占位、水平布局与底部状态栏高度（`28pt`），并统一 `UtilityCardView` 首槽位卡片的 3 行高度结构与 `ScrollView` 非惰性 `VStack` 容器，彻底消除从工作台滑向熔炉（或切石机/锻造台）时的高度突变与画面跳跃。

@@ -133,13 +133,45 @@ def format_item_name(item_id: str) -> str:
     return " ".join(capitalized)
 
 
+MINECRAFT_COLORS = [
+    "White", "Light Gray", "Gray", "Black", "Brown", "Red", "Orange", "Yellow",
+    "Lime", "Green", "Cyan", "Light Blue", "Blue", "Purple", "Magenta", "Pink",
+]
+
+DYEABLE_TAG_TO_ANY = {
+    "beds": "Any Bed",
+    "banners": "Any Banner",
+    "bundles": "Any Bundle",
+    "carpets": "Any Carpet",
+    "wool_carpets": "Any Carpet",
+    "cushions": "Any Cushion",
+    "wool": "Any Wool",
+    "wool_slabs": "Any Wool Slab",
+    "wool_stairs": "Any Wool Stairs",
+    "harnesses": "Any Harness",
+    "shulker_boxes": "Any Shulker Box",
+}
+
+
 def resolve_ingredient_name(ing) -> str:
     """Extracts a readable item name from a recipe ingredient definition."""
     if not ing:
         return ""
     if isinstance(ing, str):
+        if ing.startswith("#"):
+            raw_tag = ing.lstrip("#").split(":")[-1].lower()
+            if raw_tag in DYEABLE_TAG_TO_ANY:
+                return DYEABLE_TAG_TO_ANY[raw_tag]
+            if raw_tag == "wooden_tool_materials":
+                return "Planks"
         return format_item_name(ing)
     if isinstance(ing, list):
+        if len(ing) > 1:
+            resolved_items = [resolve_ingredient_name(x) for x in ing if x]
+            for c in sorted(MINECRAFT_COLORS, key=len, reverse=True):
+                if resolved_items and resolved_items[0].startswith(c + " "):
+                    fam = resolved_items[0][len(c) + 1 :]
+                    return f"Any {fam}"
         if len(ing) > 0:
             return resolve_ingredient_name(ing[0])
         return ""
@@ -147,6 +179,11 @@ def resolve_ingredient_name(ing) -> str:
         if "item" in ing:
             return format_item_name(ing["item"])
         if "tag" in ing:
+            raw_tag = str(ing["tag"]).lstrip("#").split(":")[-1].lower()
+            if raw_tag in DYEABLE_TAG_TO_ANY:
+                return DYEABLE_TAG_TO_ANY[raw_tag]
+            if raw_tag == "wooden_tool_materials":
+                return "Planks"
             return format_item_name(ing["tag"])
         if "id" in ing:
             return format_item_name(ing["id"])
@@ -206,7 +243,28 @@ def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> Optiona
             category = "Miscellaneous"
         raw_ings = raw_data.get("ingredients", [])
         resolved = [resolve_ingredient_name(i) for i in raw_ings]
+        if len(resolved) == 2 and any(x.endswith(" Dye") for x in resolved):
+            dye_item = next(x for x in resolved if x.endswith(" Dye"))
+            other_item = next((x for x in resolved if x != dye_item), resolved[0])
+            for c in sorted(MINECRAFT_COLORS, key=len, reverse=True):
+                if other_item.startswith(c + " "):
+                    other_item = f"Any {other_item[len(c) + 1:]}"
+                    break
+            resolved = [other_item, dye_item]
         ingredients = (resolved + [""] * 9)[:9]
+
+    # 2b. Crafting Transmute (1.21.2+ Bundle & Shulker Box dyeing)
+    elif "crafting_transmute" in recipe_type:
+        imageremark = "Crafting Table"
+        if not category:
+            category = "Miscellaneous"
+        input_item = resolve_ingredient_name(raw_data.get("input"))
+        material_item = resolve_ingredient_name(raw_data.get("material"))
+        if input_item in ("Bundle", "Bundles") or result_name.endswith(" Bundle"):
+            input_item = "Any Bundle"
+        elif input_item in ("Shulker Box", "Shulker Boxes") or result_name.endswith(" Shulker Box"):
+            input_item = "Any Shulker Box"
+        ingredients = [input_item, material_item] + [""] * 7
 
     # 3. Smelting / Blasting / Smoking / Campfire
     elif any(t in recipe_type for t in ["smelting", "blasting", "smoking", "campfire_cooking"]):
@@ -260,17 +318,8 @@ def process_recipe_json(raw_data: dict, recipe_id: int, version: str) -> Optiona
             result_name = f"{base} (Trimmed)"
             result_image = base
 
-    # 6. Special recipes
-    elif "special" in recipe_type or "decorated_pot" in recipe_type:
-        imageremark = "Crafting Table"
-        if not category:
-            category = "Miscellaneous"
-        if not result_name:
-            clean_type = recipe_type.replace("minecraft:crafting_special_", "").replace("_", " ").title()
-            result_name = clean_type
-            result_image = "Crafting Table"
-
-    if not result_name:
+    # Skip recipes with no result or completely blank ingredients
+    if not result_name or not any(x.strip() for x in ingredients if x):
         return None
 
     return {
@@ -502,6 +551,61 @@ def render_icons_for_package(
             if progress_callback and (idx % 25 == 0 or idx == total - 1):
                 progress_callback(idx + 1, total, display_key)
 
+        # Generate fused multi-color icons for dyeable item families
+        from PIL import Image
+
+        palette_colors = ["Red", "Orange", "Yellow", "Lime", "Cyan", "Blue", "Purple"]
+        family_aliases = {
+            "Bed": ["Any Bed", "Beds"],
+            "Banner": ["Any Banner", "Banners"],
+            "Bundle": ["Any Bundle", "Bundles"],
+            "Carpet": ["Any Carpet", "Carpets", "Wool Carpets"],
+            "Cushion": ["Any Cushion", "Cushions"],
+            "Wool": ["Any Wool", "Wool"],
+            "Wool Slab": ["Any Wool Slab", "Wool Slabs"],
+            "Wool Stairs": ["Any Wool Stairs", "Wool Stairs"],
+            "Harness": ["Any Harness", "Harnesses"],
+            "Shulker Box": ["Any Shulker Box", "Shulker Boxes"],
+            "Candle": ["Any Candle", "Candles"],
+        }
+        for fam, aliases in family_aliases.items():
+            color_imgs = [
+                Image.open(io.BytesIO(base64.b64decode(icons[f"{c} {fam}"]))).convert("RGBA")
+                for c in palette_colors
+                if f"{c} {fam}" in icons
+            ]
+            if len(color_imgs) >= 3:
+                w, h = color_imgs[0].size
+                pixels_list = [im.load() for im in color_imgs]
+                p_first, p_last = pixels_list[0], pixels_list[-2]
+                projs = [
+                    x * 0.65 + y * 0.35
+                    for y in range(h)
+                    for x in range(w)
+                    if p_first[x, y][3] > 16
+                    and abs(p_first[x, y][0] - p_last[x, y][0])
+                    + abs(p_first[x, y][1] - p_last[x, y][1])
+                    + abs(p_first[x, y][2] - p_last[x, y][2])
+                    > 25
+                ]
+                min_p = min(projs) if projs else 0.0
+                max_p = max(projs) if projs else (w * 0.65 + h * 0.35)
+                span = max(1.0, max_p - min_p)
+                out = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+                out_px = out.load()
+                n = len(color_imgs)
+                for y in range(h):
+                    for x in range(w):
+                        if p_first[x, y][3] == 0:
+                            continue
+                        t = max(0.0, min(0.9999, (x * 0.65 + y * 0.35 - min_p) / span))
+                        out_px[x, y] = pixels_list[int(t * n)][x, y]
+                buf = io.BytesIO()
+                out.save(buf, format="PNG", optimize=True)
+                fused_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+                for alias in aliases:
+                    icons[alias] = fused_b64
+
         return icons
     finally:
         if owns_renderer and renderer is not None:
@@ -632,7 +736,14 @@ def create_recipe_package(
     processed_recipes = []
     for next_id, item_name in enumerate(sorted(grouped_by_name.keys()), start=1):
         group = grouped_by_name[item_name]
-        group.sort(key=lambda r: (station_priority.get(r.get("imageremark") or "", 99), -int(r.get("output") or 1), r.get("ingredients") or []))
+        group.sort(
+            key=lambda r: (
+                station_priority.get(r.get("imageremark") or "", 99),
+                1 if any((x or "").endswith(" Dye") for x in (r.get("ingredients") or [])) else 0,
+                -int(r.get("output") or 1),
+                r.get("ingredients") or [],
+            )
+        )
 
         # Merge cooking variants that share the same input ingredient and output
         cooking_map = {}

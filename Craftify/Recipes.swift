@@ -466,12 +466,23 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
         "Campfire": 6
     ]
 
+    private static func isDyeingVariant(_ variant: CraftingVariant) -> Bool {
+        let nonEmpty = variant.ingredients.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !nonEmpty.isEmpty else { return false }
+        return nonEmpty.contains { $0.hasSuffix(" Dye") }
+    }
+
     static func mergeCookingVariants(_ variants: [CraftingVariant]) -> [CraftingVariant] {
+        let nonBlank = variants.filter { v in
+            v.ingredients.contains { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+        let sourceVariants = nonBlank.isEmpty ? variants : nonBlank
+
         var nonCooking: [CraftingVariant] = []
         var cookingMap: [String: (variant: CraftingVariant, stations: [String], remarks: String?)] = [:]
         var cookingOrder: [String] = []
 
-        for v in variants {
+        for v in sourceVariants {
             if v.isCookingLayout {
                 let key = v.normalizedIngredients.prefix(2).joined(separator: "|") + "@\(v.output)"
                 if var entry = cookingMap[key] {
@@ -499,6 +510,17 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
                     nonCooking.append(v)
                 }
             }
+        }
+
+        nonCooking.sort { lhs, rhs in
+            let pL = stationPriority[lhs.imageremark ?? "Crafting Table"] ?? 99
+            let pR = stationPriority[rhs.imageremark ?? "Crafting Table"] ?? 99
+            if pL != pR { return pL < pR }
+            let dL = isDyeingVariant(lhs) ? 1 : 0
+            let dR = isDyeingVariant(rhs) ? 1 : 0
+            if dL != dR { return dL < dR }
+            if lhs.output != rhs.output { return lhs.output > rhs.output }
+            return false
         }
 
         var result = nonCooking
