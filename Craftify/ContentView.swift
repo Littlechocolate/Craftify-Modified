@@ -260,7 +260,7 @@ enum RecipeRowMetrics {
     static let headerBottomSpacing: CGFloat = 10
     static let rowSpacing: CGFloat = 12
     static let sectionSpacing: CGFloat = 24
-    static let viewportBuffer: CGFloat = 900
+    static let viewportBuffer: CGFloat = 1200
 
     static func rowHeight(for dynamicTypeSize: DynamicTypeSize) -> CGFloat {
         if dynamicTypeSize.isAccessibilitySize {
@@ -486,7 +486,7 @@ struct RecipeVirtualizedSectionsView: View {
                     RecipeCell(recipe: recipe, isCraftifyPick: false)
                         .equatable()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RecipeInteractiveButtonStyle())
             }
         } else {
             HStack(spacing: 16) {
@@ -495,7 +495,7 @@ struct RecipeVirtualizedSectionsView: View {
                         RecipeCell(recipe: recipe, isCraftifyPick: false)
                             .equatable()
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(RecipeInteractiveButtonStyle())
                     .frame(maxWidth: .infinity)
                 }
                 if rowRecipes.count == 1 {
@@ -553,7 +553,6 @@ struct RecipeListView: View {
     @State private var measuredScrollY: CGFloat = 0
     @State private var jumpTargetY: CGFloat?
     @State private var viewportHeight: CGFloat = 850
-    @State private var scrollTask: Task<Void, Never>?
 
     var body: some View {
         let layout = sectionsLayout
@@ -630,23 +629,18 @@ struct RecipeListView: View {
                             availableLetters: availableLettersSet,
                             accent: accent,
                             onSelectLetter: { selectedLetter in
-                                scrollTask?.cancel()
-                                scrollTask = Task { @MainActor in
-                                    await Task.yield()
-                                    guard !Task.isCancelled else { return }
-                                    if let target = resolveScrollTarget(for: selectedLetter),
-                                       let section = layout.sectionsByLetter[target] {
-                                        let clampedY = min(
-                                            section.relMinY,
-                                            max(0, layout.totalHeight - viewportHeight)
-                                        )
-                                        var transaction = Transaction()
-                                        transaction.disablesAnimations = true
-                                        withTransaction(transaction) {
-                                            jumpTargetY = clampedY
-                                            measuredScrollY = clampedY
-                                            proxy.scrollTo(target, anchor: .top)
-                                        }
+                                if let target = resolveScrollTarget(for: selectedLetter),
+                                   let section = layout.sectionsByLetter[target] {
+                                    let clampedY = min(
+                                        section.relMinY,
+                                        max(0, layout.totalHeight - viewportHeight)
+                                    )
+                                    var transaction = Transaction()
+                                    transaction.disablesAnimations = true
+                                    withTransaction(transaction) {
+                                        jumpTargetY = clampedY
+                                        measuredScrollY = clampedY
+                                        proxy.scrollTo(target, anchor: .top)
                                     }
                                 }
                             },
@@ -657,7 +651,7 @@ struct RecipeListView: View {
                                 jumpTargetY = nil
                             }
                         )
-                        .padding(.trailing, 3)
+                        .padding(.trailing, 2)
                         .padding(.vertical, 8)
                     }
                 }
@@ -680,7 +674,9 @@ struct RecipeListView: View {
     private var picksSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             CraftifyPicksHeader(isExpanded: isCraftifyPicksExpanded) {
-                withAnimation(.snappy) { isCraftifyPicksExpanded.toggle() }
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                    isCraftifyPicksExpanded.toggle()
+                }
             }
 
             if isCraftifyPicksExpanded {
@@ -690,7 +686,7 @@ struct RecipeListView: View {
                             NavigationLink(value: recipe) {
                                 RecipeCell(recipe: recipe, isCraftifyPick: true)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(RecipeInteractiveButtonStyle())
                         }
                     }
                     .padding(.vertical, 5)
@@ -707,6 +703,7 @@ private struct IndexBarStaticTrack: View, Equatable {
     let alphabet: [String]
     let availableLetters: Set<String>
     let accent: Color
+    let activeLetter: String?
     let showDots: Bool
     let letterHeight: CGFloat
     let dotHeight: CGFloat
@@ -716,17 +713,27 @@ private struct IndexBarStaticTrack: View, Equatable {
             && lhs.showDots == rhs.showDots
             && lhs.letterHeight == rhs.letterHeight
             && lhs.accent == rhs.accent
+            && lhs.activeLetter == rhs.activeLetter
     }
 
     var body: some View {
         VStack(spacing: 0) {
             ForEach(Array(alphabet.enumerated()), id: \.offset) { idx, letter in
                 let isAvailable = availableLetters.contains(letter)
+                let isActive = letter == activeLetter
 
-                Text(letter)
-                    .font(.system(size: showDots ? 10 : 9.5, weight: isAvailable ? .bold : .medium, design: .rounded))
-                    .foregroundStyle(isAvailable ? accent : Color.secondary.opacity(0.38))
-                    .frame(width: 18, height: letterHeight)
+                ZStack {
+                    if isActive {
+                        Circle()
+                            .fill(accent)
+                            .frame(width: 14, height: 14)
+                    }
+
+                    Text(letter)
+                        .font(.system(size: showDots ? 10 : 9.5, weight: isActive ? .heavy : (isAvailable ? .bold : .medium), design: .rounded))
+                        .foregroundStyle(isActive ? Color.white : (isAvailable ? accent : Color.secondary.opacity(0.38)))
+                }
+                .frame(width: 18, height: letterHeight)
 
                 if showDots && idx < alphabet.count - 1 {
                     Text("·")
@@ -736,7 +743,6 @@ private struct IndexBarStaticTrack: View, Equatable {
                 }
             }
         }
-        .drawingGroup()
     }
 }
 
@@ -769,7 +775,7 @@ struct RecipeAlphabetIndexBar: View {
                     let letter = alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : (alphabet.first ?? "A")
                     let bubbleCenterY = max(26, min(dragY, barContentHeight - 26))
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 15, style: .continuous)
                                 .fill(.ultraThickMaterial)
@@ -789,9 +795,11 @@ struct RecipeAlphabetIndexBar: View {
                             .fill(accent)
                             .frame(width: 5, height: 5)
                     }
+                    .frame(width: 62, height: 52)
                     .offset(x: -30, y: bubbleCenterY - 26)
                     .transition(.scale(scale: 0.8).combined(with: .opacity))
                     .allowsHitTesting(false)
+                    .animation(.interactiveSpring(response: 0.12, dampingFraction: 0.85), value: dragY)
                 }
 
                 // Index track: pressed slightly toward the far right edge when scrubbing (all letters remain visible)
@@ -799,6 +807,7 @@ struct RecipeAlphabetIndexBar: View {
                     alphabet: alphabet,
                     availableLetters: availableLetters,
                     accent: accent,
+                    activeLetter: isTouching && alphabet.indices.contains(activeIndex) ? alphabet[activeIndex] : nil,
                     showDots: showDots,
                     letterHeight: letterHeight,
                     dotHeight: dotHeight
@@ -807,13 +816,19 @@ struct RecipeAlphabetIndexBar: View {
                 .padding(.vertical, 6)
                 .padding(.horizontal, 2)
                 .frame(width: 22, height: barContentHeight)
-                .background(.ultraThinMaterial, in: Capsule())
+                .background(
+                    Capsule()
+                        .fill(Color(uiColor: .systemBackground).opacity(isTouching ? 0.95 : 0.82))
+                        .background(.ultraThinMaterial, in: Capsule())
+                )
                 .overlay(
                     Capsule()
-                        .strokeBorder(Color.primary.opacity(0.08), lineWidth: 0.5)
+                        .strokeBorder(Color.primary.opacity(isTouching ? 0.16 : 0.08), lineWidth: 0.5)
                 )
-                .offset(x: isTouching ? 2.5 : 0)
-                .animation(.spring(response: 0.22, dampingFraction: 0.82), value: isTouching)
+                .shadow(color: Color.black.opacity(isTouching ? 0.12 : 0.05), radius: 4, x: -1, y: 2)
+                .offset(x: isTouching ? 2 : 0)
+                .animation(.interactiveSpring(response: 0.22, dampingFraction: 0.82), value: isTouching)
+                .frame(width: 32, alignment: .trailing)
                 .contentShape(Rectangle())
                 .highPriorityGesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -822,7 +837,7 @@ struct RecipeAlphabetIndexBar: View {
                             let clampedY = max(6, min(value.location.y, barContentHeight - 6))
                             let y = clampedY - 6
                             let ratio = min(max(y / usableHeight, 0), 0.9999)
-                            let index = Int(ratio * CGFloat(alphabet.count))
+                            let index = min(max(Int(ratio * CGFloat(alphabet.count)), 0), alphabet.count - 1)
 
                             if !isTouching {
                                 HapticFeedback.prepareSelection()
@@ -854,9 +869,18 @@ struct RecipeAlphabetIndexBar: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
         }
-        .frame(width: 28)
+        .frame(width: 96)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Alphabetical recipe index, A to Z")
+    }
+}
+
+struct RecipeInteractiveButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.975 : 1.0)
+            .opacity(configuration.isPressed ? 0.90 : 1.0)
+            .animation(.interactiveSpring(response: 0.20, dampingFraction: 0.78), value: configuration.isPressed)
     }
 }
 
@@ -1000,6 +1024,15 @@ struct RecipeCell: View, Equatable {
     }
 }
 
+struct CraftifyHeaderButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.985 : 1.0)
+            .opacity(configuration.isPressed ? 0.85 : 1.0)
+            .animation(.interactiveSpring(response: 0.20, dampingFraction: 0.80), value: configuration.isPressed)
+    }
+}
+
 @MainActor
 struct CraftifyPicksHeader: View {
     let isExpanded: Bool
@@ -1020,13 +1053,15 @@ struct CraftifyPicksHeader: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Image(systemName: isExpanded ? "chevron.up.circle.fill" : "chevron.down.circle.fill")
+                Image(systemName: "chevron.down.circle.fill")
                     .font(.title3)
                     .foregroundStyle(accent)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .animation(.spring(response: 0.35, dampingFraction: 0.82), value: isExpanded)
             }
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(CraftifyHeaderButtonStyle())
         .accessibilityLabel(isExpanded ? "Collapse Craftify Picks" : "Expand Craftify Picks")
         .accessibilityHint("Shows or hides recommended recipes")
     }
