@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 enum SelectedItem: Equatable {
     case grid(index: Int)
@@ -24,39 +25,24 @@ struct RecipeDetailView: View {
     @State private var selectedItem: SelectedItem?
     @State private var showingChestPicker = false
     @State private var selectedCraftingOption = 0
+    @State private var isDraggingLayoutPager = false
+
     private var variants: [CraftingVariant] {
         recipe.resolvedVariants
     }
 
-    private var safeSelectedOption: Int {
-        guard !variants.isEmpty else { return 0 }
-        return min(max(selectedCraftingOption, 0), variants.count - 1)
-    }
-
-    private var currentVariant: CraftingVariant {
-        let list = variants
-        guard list.indices.contains(safeSelectedOption) else {
-            return CraftingVariant(
-                ingredients: recipe.ingredients,
-                output: recipe.output,
-                imageremark: recipe.imageremark,
-                remarks: recipe.remarks
-            )
-        }
-        return list[safeSelectedOption]
-    }
-
     var body: some View {
-        ScrollView {
+        ScrollView(.vertical, showsIndicators: true) {
             VStack(alignment: .leading, spacing: 20) {
-                RecipeIdentityHeader(recipe: recipe, output: currentVariant.output)
+                RecipeIdentityHeader(recipe: recipe)
 
                 CraftingRecipeCard(
                     recipe: recipe,
                     variants: variants,
                     selectedCraftingOption: $selectedCraftingOption,
                     selectedItem: $selectedItem,
-                    selectedDetail: $selectedDetail
+                    selectedDetail: $selectedDetail,
+                    isHorizontalDragging: $isDraggingLayoutPager
                 )
 
                 if let selectedDetail {
@@ -74,6 +60,7 @@ struct RecipeDetailView: View {
             .padding(.top, 12)
             .padding(.bottom, 36)
         }
+        .scrollDisabled(isDraggingLayoutPager)
         .navigationTitle(recipe.name)
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
@@ -92,8 +79,8 @@ struct RecipeDetailView: View {
         }
         .craftifyPage()
         .onChange(of: selectedCraftingOption) { _, _ in
-            selectedDetail = nil
-            selectedItem = nil
+            if selectedDetail != nil { selectedDetail = nil }
+            if selectedItem != nil { selectedItem = nil }
             HapticFeedback.selection()
         }
         .onChange(of: dataManager.isLoading) { _, isLoading in
@@ -106,7 +93,6 @@ struct RecipeDetailView: View {
 @MainActor
 private struct RecipeIdentityHeader: View {
     let recipe: Recipe
-    let output: Int
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.craftifyAccentColor) private var accent
 
@@ -139,7 +125,11 @@ private struct RecipeIdentityHeader: View {
 
     private var recipeImage: some View {
         ZStack {
-            AppBackground()
+            LinearGradient(
+                colors: [accent.opacity(0.16), accent.opacity(0.04)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
             CraftImage(key: recipe.image)
                 .scaledToFit()
                 .padding(16)
@@ -270,6 +260,172 @@ private struct AddRecipeToChestView: View {
     }
 }
 
+private final class PagerPanGestureRecognizer: UIPanGestureRecognizer {}
+
+@MainActor
+private struct HorizontalPagerGestureBridge: UIViewRepresentable {
+    let isEnabled: Bool
+    let onChanged: (CGFloat) -> Void
+    let onEnded: (CGFloat, CGFloat) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onChanged: onChanged, onEnded: onEnded)
+    }
+
+    func makeUIView(context: Context) -> BridgeView {
+        let view = BridgeView()
+        view.isUserInteractionEnabled = false
+        view.backgroundColor = .clear
+        view.coordinator = context.coordinator
+        context.coordinator.bridgeView = view
+        return view
+    }
+
+    func updateUIView(_ uiView: BridgeView, context: Context) {
+        context.coordinator.isEnabled = isEnabled
+        context.coordinator.onChanged = onChanged
+        context.coordinator.onEnded = onEnded
+        uiView.attachGestureIfNeeded()
+    }
+
+    static func dismantleUIView(_ uiView: BridgeView, coordinator: Coordinator) {
+        uiView.detachGesture()
+    }
+
+    final class BridgeView: UIView {
+        weak var coordinator: Coordinator?
+        private weak var attachedView: UIView?
+        private var panGesture: PagerPanGestureRecognizer?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil {
+                attachGestureIfNeeded()
+            } else {
+                detachGesture()
+            }
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            if window != nil && panGesture == nil {
+                attachGestureIfNeeded()
+            }
+        }
+
+        func attachGestureIfNeeded() {
+            guard let coordinator else { return }
+            var candidate: UIView? = superview
+            var targetScrollView: UIScrollView?
+            while let current = candidate {
+                if let sv = current as? UIScrollView {
+                    targetScrollView = sv
+                    break
+                }
+                candidate = current.superview
+            }
+            guard let target = targetScrollView ?? superview else { return }
+
+            if let scrollView = target as? UIScrollView {
+                scrollView.isDirectionalLockEnabled = true
+                scrollView.alwaysBounceHorizontal = false
+                scrollView.showsHorizontalScrollIndicator = false
+                if scrollView.contentSize.width > scrollView.bounds.width && scrollView.bounds.width > 0 {
+                    scrollView.contentSize.width = scrollView.bounds.width
+                }
+            }
+
+            if attachedView === target, panGesture != nil {
+                return
+            }
+            detachGesture()
+
+            let pan = PagerPanGestureRecognizer(target: coordinator, action: #selector(Coordinator.handlePan(_:)))
+            pan.delegate = coordinator
+            pan.maximumNumberOfTouches = 1
+            pan.cancelsTouchesInView = true
+            target.addGestureRecognizer(pan)
+
+            attachedView = target
+            panGesture = pan
+        }
+
+        func detachGesture() {
+            if let pan = panGesture, let attached = attachedView {
+                attached.removeGestureRecognizer(pan)
+            }
+            panGesture = nil
+            attachedView = nil
+        }
+    }
+
+    final class Coordinator: NSObject, UIGestureRecognizerDelegate {
+        var isEnabled: Bool = true
+        var onChanged: (CGFloat) -> Void
+        var onEnded: (CGFloat, CGFloat) -> Void
+        weak var bridgeView: BridgeView?
+
+        init(onChanged: @escaping (CGFloat) -> Void, onEnded: @escaping (CGFloat, CGFloat) -> Void) {
+            self.onChanged = onChanged
+            self.onEnded = onEnded
+        }
+
+        @objc func handlePan(_ gesture: UIPanGestureRecognizer) {
+            guard let bridgeView else { return }
+            let translation = gesture.translation(in: bridgeView).x
+            let velocity = gesture.velocity(in: bridgeView).x
+
+            switch gesture.state {
+            case .began, .changed:
+                onChanged(translation)
+            case .ended, .cancelled, .failed:
+                onEnded(translation, velocity)
+            default:
+                break
+            }
+        }
+
+        func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            guard isEnabled,
+                  let pan = gestureRecognizer as? UIPanGestureRecognizer,
+                  let bridgeView,
+                  bridgeView.window != nil else {
+                return false
+            }
+
+            if let window = bridgeView.window {
+                let windowLoc = pan.location(in: window)
+                let winVel = pan.velocity(in: window)
+                if windowLoc.x < 22 && winVel.x > 0 {
+                    return false
+                }
+            }
+
+            let localPoint = pan.location(in: bridgeView)
+            guard bridgeView.bounds.insetBy(dx: -4, dy: -4).contains(localPoint) else {
+                return false
+            }
+
+            let velocity = pan.velocity(in: bridgeView)
+            return abs(velocity.x) > abs(velocity.y) * 0.72
+        }
+
+        func gestureRecognizer(
+            _ gestureRecognizer: UIGestureRecognizer,
+            shouldBeRequiredToFailBy otherGestureRecognizer: UIGestureRecognizer
+        ) -> Bool {
+            guard gestureRecognizer is PagerPanGestureRecognizer else { return false }
+            if otherGestureRecognizer is UIScreenEdgePanGestureRecognizer {
+                return false
+            }
+            if otherGestureRecognizer is UIPanGestureRecognizer {
+                return true
+            }
+            return false
+        }
+    }
+}
+
 @MainActor
 private struct CraftingRecipeCard: View {
     let recipe: Recipe
@@ -277,11 +433,18 @@ private struct CraftingRecipeCard: View {
     @Binding var selectedCraftingOption: Int
     @Binding var selectedItem: SelectedItem?
     @Binding var selectedDetail: String?
+    @Binding var isHorizontalDragging: Bool
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.craftifyAccentColor) private var accent
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var measuredPageWidth: CGFloat = 320
+    @State private var lastSwitchTimestamp: TimeInterval = 0
+    @State private var lastSwitchDirection: Int = 0
+    @State private var consecutiveSwitchStreak: Int = 0
 
     private var cellSize: CGFloat {
         horizontalSizeClass == .regular ? 72 : 56
@@ -316,6 +479,93 @@ private struct CraftingRecipeCard: View {
         return gridDimension + 56
     }
 
+    private func switchAnimation(initialVelocity: CGFloat, streak: Int) -> Animation? {
+        guard !reduceMotion else { return nil }
+        let stiffness = 340.0 + min(Double(streak) * 60.0, 180.0)
+        let damping = 29.0 + min(Double(streak) * 2.4, 7.2)
+        return .interpolatingSpring(
+            mass: 0.78,
+            stiffness: stiffness,
+            damping: damping,
+            initialVelocity: initialVelocity
+        )
+    }
+
+    private func commitVariantSwitch(to targetIndex: Int, rawVelocity: CGFloat = 0) {
+        let clamped = min(max(targetIndex, 0), max(variants.count - 1, 0))
+        let now = ProcessInfo.processInfo.systemUptime
+        let direction = clamped > safeIndex ? 1 : (clamped < safeIndex ? -1 : 0)
+
+        if direction != 0 {
+            if direction == lastSwitchDirection && (now - lastSwitchTimestamp) < 0.50 {
+                consecutiveSwitchStreak = min(consecutiveSwitchStreak + 1, 4)
+            } else {
+                consecutiveSwitchStreak = 0
+            }
+            lastSwitchDirection = direction
+            lastSwitchTimestamp = now
+        } else {
+            consecutiveSwitchStreak = 0
+        }
+
+        let pageW = max(measuredPageWidth, 1)
+        let remainingDistance = max(abs(CGFloat(clamped - safeIndex) * pageW - dragOffset), 28)
+        let baseVelocity = abs(rawVelocity) / remainingDistance
+        let streakBoost = 1.0 + CGFloat(consecutiveSwitchStreak) * 0.42
+        let boostedVelocity = min(max(baseVelocity * streakBoost, direction != 0 ? 2.4 + CGFloat(consecutiveSwitchStreak) * 1.4 : 1.2), 32.0)
+
+        withAnimation(switchAnimation(initialVelocity: boostedVelocity, streak: consecutiveSwitchStreak)) {
+            selectedCraftingOption = clamped
+            dragOffset = 0
+        }
+    }
+
+    private func handleHorizontalPanChanged(_ dx: CGFloat) {
+        guard variants.count > 1 else { return }
+        if !isHorizontalDragging {
+            isHorizontalDragging = true
+        }
+        let atLeadingEdge = safeIndex == 0 && dx > 0
+        let atTrailingEdge = safeIndex == variants.count - 1 && dx < 0
+        let effectiveDx = (atLeadingEdge || atTrailingEdge) ? dx * 0.24 : dx
+
+        var transaction = Transaction(
+            animation: .interactiveSpring(response: 0.08, dampingFraction: 0.94, blendDuration: 0.08)
+        )
+        transaction.isContinuous = true
+        withTransaction(transaction) {
+            dragOffset = effectiveDx
+        }
+    }
+
+    private func handleHorizontalPanEnded(_ dx: CGFloat, velocity vx: CGFloat) {
+        if isHorizontalDragging {
+            isHorizontalDragging = false
+        }
+        guard variants.count > 1 else {
+            if dragOffset != 0 {
+                withAnimation(.spring(response: 0.24, dampingFraction: 0.88)) {
+                    dragOffset = 0
+                }
+            }
+            return
+        }
+
+        let pageW = max(measuredPageWidth, 1)
+        let projectedDx = dx + vx * 0.16
+        let distanceThreshold = pageW * 0.14
+        let velocityThreshold: CGFloat = 130
+
+        var targetIndex = safeIndex
+        if dx < -distanceThreshold || vx < -velocityThreshold || projectedDx < -pageW * 0.24 {
+            targetIndex = min(variants.count - 1, safeIndex + 1)
+        } else if dx > distanceThreshold || vx > velocityThreshold || projectedDx > pageW * 0.24 {
+            targetIndex = max(0, safeIndex - 1)
+        }
+
+        commitVariantSwitch(to: targetIndex, rawVelocity: vx)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 12) {
@@ -326,7 +576,6 @@ private struct CraftingRecipeCard: View {
                         : "Tap an ingredient or the output to inspect it.",
                     symbol: activeVariant.isCookingLayout ? "flame.fill" : "square.grid.3x3.fill"
                 )
-                .contentTransition(.opacity)
 
                 if variants.count > 1 {
                     Spacer(minLength: 4)
@@ -337,38 +586,45 @@ private struct CraftingRecipeCard: View {
                     .contentTransition(.numericText())
                 }
             }
-            .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: safeIndex)
 
             if variants.count > 1 {
-                TabView(selection: $selectedCraftingOption) {
-                    ForEach(Array(variants.enumerated()), id: \.offset) { idx, variant in
-                        variantLayoutView(for: variant)
-                            .padding(.vertical, 6)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                            .tag(idx)
+                GeometryReader { proxy in
+                    let pageWidth = max(proxy.size.width, 1)
+                    HStack(spacing: 0) {
+                        ForEach(Array(variants.enumerated()), id: \.offset) { _, variant in
+                            variantLayoutView(for: variant)
+                                .padding(.vertical, 6)
+                                .frame(width: pageWidth, height: layoutPageHeight, alignment: .center)
+                        }
+                    }
+                    .offset(x: -CGFloat(safeIndex) * pageWidth + dragOffset)
+                    .onAppear {
+                        measuredPageWidth = pageWidth
+                    }
+                    .onChange(of: pageWidth) { _, newWidth in
+                        measuredPageWidth = newWidth
                     }
                 }
-                .tabViewStyle(.page(indexDisplayMode: .never))
                 .frame(height: layoutPageHeight)
+                .clipped()
 
                 HStack(spacing: 8) {
                     Spacer()
                     ForEach(variants.indices, id: \.self) { idx in
-                        Button {
-                            withAnimation(.snappy(duration: 0.24)) {
-                                selectedCraftingOption = idx
+                        Capsule()
+                            .fill(idx == safeIndex ? accent : Color.primary.opacity(0.18))
+                            .frame(width: idx == safeIndex ? 20 : 7, height: 7)
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 2)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                commitVariantSwitch(to: idx, rawVelocity: 520)
                             }
-                        } label: {
-                            Capsule()
-                                .fill(idx == safeIndex ? accent : Color.primary.opacity(0.18))
-                                .frame(width: idx == safeIndex ? 20 : 7, height: 7)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("Layout \(idx + 1) of \(variants.count)")
+                            .accessibilityLabel("Layout \(idx + 1) of \(variants.count)")
+                            .accessibilityAddTraits(.isButton)
                     }
                     Spacer()
                 }
-                .animation(reduceMotion ? nil : .snappy(duration: 0.24), value: safeIndex)
             } else {
                 variantLayoutView(for: activeVariant)
             }
@@ -394,8 +650,18 @@ private struct CraftingRecipeCard: View {
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background {
+            HorizontalPagerGestureBridge(
+                isEnabled: variants.count > 1,
+                onChanged: { dx in
+                    handleHorizontalPanChanged(dx)
+                },
+                onEnded: { dx, vx in
+                    handleHorizontalPanEnded(dx, velocity: vx)
+                }
+            )
+        }
         .craftifyCard(cornerRadius: 24)
-        .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.86), value: safeIndex)
     }
 
     @ViewBuilder
@@ -403,10 +669,7 @@ private struct CraftingRecipeCard: View {
         if dynamicTypeSize.isAccessibilitySize {
             verticalLayout(for: variant)
         } else {
-            ViewThatFits(in: .horizontal) {
-                horizontalLayout(for: variant)
-                verticalLayout(for: variant)
-            }
+            horizontalLayout(for: variant)
         }
     }
 
@@ -527,7 +790,6 @@ private struct CraftingRecipeCard: View {
             }
 
             if let xp = variant.parsedXP {
-                Spacer(minLength: 4)
                 HStack(spacing: 3) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 9, weight: .bold))
@@ -565,34 +827,36 @@ private struct CraftingRecipeCard: View {
     }
 
     private func outputTile(output: Int) -> some View {
-        Button {
+        VStack(spacing: 7) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 15, style: .continuous)
+                    .fill(accent.opacity(0.09))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 15, style: .continuous)
+                            .stroke(
+                                selectedItem == .output ? accent : accent.opacity(0.18),
+                                lineWidth: selectedItem == .output ? 2 : 1
+                            )
+                    }
+                CraftImage(key: recipe.image)
+                    .scaledToFit()
+                    .padding(9)
+            }
+            .frame(width: cellSize + 12, height: cellSize + 12)
+
+            Text("×\(output)")
+                .font(.headline.monospacedDigit())
+                .foregroundStyle(.primary)
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .onTapGesture {
+            guard !isHorizontalDragging else { return }
             selectedDetail = recipe.name
             selectedItem = .output
             HapticFeedback.impact()
-        } label: {
-            VStack(spacing: 7) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .fill(accent.opacity(0.09))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 15, style: .continuous)
-                                .stroke(
-                                    selectedItem == .output ? accent : accent.opacity(0.18),
-                                    lineWidth: selectedItem == .output ? 2 : 1
-                                )
-                        }
-                    CraftImage(key: recipe.image)
-                        .scaledToFit()
-                        .padding(9)
-                }
-                .frame(width: cellSize + 12, height: cellSize + 12)
-
-                Text("×\(output)")
-                    .font(.headline.monospacedDigit())
-                    .foregroundStyle(.primary)
-            }
         }
-        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isButton)
         .accessibilityLabel("Output: \(recipe.name), quantity \(output)")
         .accessibilityHint("Shows output details")
     }
@@ -623,29 +887,25 @@ private struct CraftingRecipeCard: View {
                         .font(.caption.bold())
                         .tracking(0.8)
                         .foregroundStyle(accent)
-                        .contentTransition(.opacity)
                 }
 
                 VStack(spacing: 10) {
-                    // Slot 0: Primary Utility Card (Fixed relative position to header, uniform 3-row height across Crafting & Smelting)
+                    // Slot 0: Primary Utility Card (Permanent structural identity, zero view destruction during switches)
                     UtilityCardView(item: primary)
 
-                    // Additional utilities (e.g. Blast Furnace, Smoker, Campfire) expand smoothly downwards
+                    // Extra utilities (e.g. Blast Furnace, Smoker, Campfire) with reversible symmetric spring transition
                     ForEach(extraItems) { item in
                         UtilityCardView(item: item)
+                            .allowsHitTesting(false)
                             .transition(
                                 reduceMotion
                                     ? .opacity
-                                    : .asymmetric(
-                                        insertion: .move(edge: .top).combined(with: .opacity),
-                                        removal: .opacity.combined(with: .move(edge: .top))
-                                    )
+                                    : .opacity.combined(with: .scale(scale: 0.96, anchor: .top))
                             )
                     }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .geometryGroup()
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Required Crafting Utilities")
         }
@@ -682,16 +942,9 @@ enum RecipeUtilityItem: Identifiable, Equatable {
             return info.displayName
         }
     }
-}
 
-@MainActor
-struct UtilityCardView: View {
-    let item: RecipeUtilityItem
-    @Environment(\.craftifyAccentColor) private var accent
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var descriptionText: String {
-        switch item {
+    var descriptionText: String {
+        switch self {
         case .cooking(let info):
             return info.stationDescription
         case .standard(let station, _):
@@ -708,134 +961,146 @@ struct UtilityCardView: View {
         }
     }
 
-    private func standardBadge(for station: String) -> (label: String, icon: String) {
-        switch station {
-        case "Stonecutter":
-            return ("1:1 Cut", "scissors")
-        case "Smithing Table":
-            return ("Upgrade", "hammer.fill")
-        default:
-            return ("3×3 Grid", "square.grid.3x3.fill")
+    var badgeIcon: String {
+        switch self {
+        case .cooking:
+            return "clock.fill"
+        case .standard(let station, _):
+            switch station {
+            case "Stonecutter": return "scissors"
+            case "Smithing Table": return "hammer.fill"
+            default: return "square.grid.3x3.fill"
+            }
         }
     }
 
-    private func standardFooter(for station: String) -> (label: String, icon: String) {
-        switch station {
-        case "Stonecutter":
-            return ("Instant stone & copper cutting", "cube.fill")
-        case "Smithing Table":
-            return ("Preserves enchantments & trims", "sparkles")
-        default:
-            return ("Instant crafting • No fuel required", "checkmark.circle.fill")
+    var badgePrimaryText: String {
+        switch self {
+        case .cooking(let info):
+            return String(format: "%.0fs", info.seconds)
+        case .standard(let station, _):
+            switch station {
+            case "Stonecutter": return "1:1 Cut"
+            case "Smithing Table": return "Upgrade"
+            default: return "3×3 Grid"
+            }
         }
     }
+
+    var badgeSecondaryText: String? {
+        switch self {
+        case .cooking(let info):
+            return "(\(info.ticks)t)"
+        case .standard:
+            return nil
+        }
+    }
+
+    var footerIcon: String {
+        switch self {
+        case .cooking(let info):
+            return info.station == "Campfire" ? "leaf.fill" : "flame.fill"
+        case .standard(let station, _):
+            switch station {
+            case "Stonecutter": return "cube.fill"
+            case "Smithing Table": return "sparkles"
+            default: return "checkmark.circle.fill"
+            }
+        }
+    }
+
+    var footerText: String {
+        switch self {
+        case .cooking(let info):
+            return info.fuelDescription
+        case .standard(let station, let remarks):
+            if let remarks = remarks?.trimmingCharacters(in: .whitespacesAndNewlines), !remarks.isEmpty {
+                return remarks
+            }
+            switch station {
+            case "Stonecutter": return "Instant stone & copper cutting"
+            case "Smithing Table": return "Preserves enchantments & trims"
+            default: return "Instant crafting • No fuel required"
+            }
+        }
+    }
+
+    var xpValue: Double? {
+        switch self {
+        case .cooking(let info):
+            return info.xp
+        case .standard:
+            return nil
+        }
+    }
+}
+
+@MainActor
+struct UtilityCardView: View {
+    let item: RecipeUtilityItem
+    @Environment(\.craftifyAccentColor) private var accent
 
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            ZStack {
-                CraftImage(key: item.stationKey)
-                    .scaledToFit()
-                    .id(item.stationKey)
-                    .transition(
-                        reduceMotion
-                            ? .opacity
-                            : .opacity.combined(with: .scale(scale: 0.92))
-                    )
-            }
-            .frame(width: 54, height: 54)
-            .padding(6)
-            .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(accent.opacity(0.18), lineWidth: 1)
-            }
-            .accessibilityHidden(true)
+            CraftImage(key: item.stationKey)
+                .scaledToFit()
+                .frame(width: 54, height: 54)
+                .padding(6)
+                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(accent.opacity(0.18), lineWidth: 1)
+                }
+                .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack(alignment: .center, spacing: 8) {
                     Text(item.displayName)
                         .font(.headline)
                         .foregroundStyle(.primary)
-                        .contentTransition(.opacity)
 
                     Spacer(minLength: 4)
 
-                    switch item {
-                    case .cooking(let info):
-                        HStack(spacing: 4) {
-                            Image(systemName: "clock.fill")
-                                .font(.caption2)
-                                .foregroundStyle(accent)
-                            Text(String(format: "%.0fs", info.seconds))
-                                .font(.subheadline.monospacedDigit().bold())
-                                .foregroundStyle(.primary)
-                            Text("(\(info.ticks)t)")
+                    HStack(spacing: 4) {
+                        Image(systemName: item.badgeIcon)
+                            .font(.caption2)
+                            .foregroundStyle(accent)
+                        Text(item.badgePrimaryText)
+                            .font(.caption.monospacedDigit().bold())
+                            .foregroundStyle(.primary)
+                        if let secondary = item.badgeSecondaryText {
+                            Text(secondary)
                                 .font(.caption2.monospacedDigit())
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(accent.opacity(0.09), in: Capsule())
-
-                    case .standard(let station, _):
-                        let badge = standardBadge(for: station)
-                        HStack(spacing: 4) {
-                            Image(systemName: badge.icon)
-                                .font(.caption2)
-                                .foregroundStyle(accent)
-                            Text(badge.label)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.primary)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(accent.opacity(0.09), in: Capsule())
                     }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(accent.opacity(0.09), in: Capsule())
                 }
 
-                Text(descriptionText)
+                Text(item.descriptionText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.opacity)
 
-                switch item {
-                case .cooking(let info):
-                    HStack(spacing: 8) {
-                        Label(info.fuelDescription, systemImage: info.station == "Campfire" ? "leaf.fill" : "flame.fill")
-                            .font(.caption2.weight(.medium))
+                HStack(spacing: 8) {
+                    Label(item.footerText, systemImage: item.footerIcon)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+
+                    if let xp = item.xpValue {
+                        Text("•")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
-
-                        if let xp = info.xp {
-                            Text("•")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                            Label(String(format: "+%.2g XP", xp), systemImage: "sparkles")
-                                .font(.caption2.weight(.bold))
-                                .foregroundStyle(.green)
-                        }
-                    }
-                    .padding(.top, 2)
-                    .contentTransition(.opacity)
-
-                case .standard(let station, let remarks):
-                    if let remarks = remarks?.trimmingCharacters(in: .whitespacesAndNewlines), !remarks.isEmpty {
-                        Text(remarks)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(accent)
-                            .lineLimit(1)
-                            .padding(.top, 2)
-                            .contentTransition(.opacity)
-                    } else {
-                        let footer = standardFooter(for: station)
-                        Label(footer.label, systemImage: footer.icon)
-                            .font(.caption2.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.top, 2)
-                            .contentTransition(.opacity)
+                        Label(String(format: "+%.2g XP", xp), systemImage: "sparkles")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.green)
                     }
                 }
+                .padding(.top, 2)
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
@@ -843,7 +1108,6 @@ struct UtilityCardView: View {
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .background(Color.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .geometryGroup()
     }
 }
 
@@ -1058,32 +1322,32 @@ struct GridCell: View {
     @Environment(\.craftifyAccentColor) private var accent
 
     var body: some View {
-        Button {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(ingredient.isEmpty ? Color.primary.opacity(0.035) : accent.opacity(0.075))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(
+                            isSelected ? accent : Color.primary.opacity(ingredient.isEmpty ? 0.05 : 0.10),
+                            lineWidth: isSelected ? 2 : 1
+                        )
+                }
+
+            if !ingredient.isEmpty {
+                CraftImage(key: ingredient)
+                    .scaledToFit()
+                    .padding(7)
+            }
+        }
+        .frame(width: cellSize, height: cellSize)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onTapGesture {
             guard !ingredient.isEmpty else { return }
             HapticFeedback.impact()
             onTap()
-        } label: {
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(ingredient.isEmpty ? Color.primary.opacity(0.035) : accent.opacity(0.075))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .stroke(
-                                isSelected ? accent : Color.primary.opacity(ingredient.isEmpty ? 0.05 : 0.10),
-                                lineWidth: isSelected ? 2 : 1
-                            )
-                    }
-
-                if !ingredient.isEmpty {
-                    CraftImage(key: ingredient)
-                        .scaledToFit()
-                        .padding(7)
-                }
-            }
-            .frame(width: cellSize, height: cellSize)
         }
-        .buttonStyle(.plain)
-        .disabled(ingredient.isEmpty)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(ingredient.isEmpty ? [] : .isButton)
         .accessibilityLabel(ingredient.isEmpty ? "Empty crafting slot" : "Ingredient: \(ingredient)")
         .accessibilityHint(ingredient.isEmpty ? "" : "Shows ingredient details")
     }

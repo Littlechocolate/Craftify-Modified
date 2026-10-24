@@ -70,8 +70,11 @@ struct AppBackground: View {
                     .rotationEffect(.degrees(10))
                     .offset(x: -70, y: geometry.size.height * 0.72)
             }
+            .clipped()
             .opacity(reduceTransparency ? 0.24 : 0.48)
         }
+        .clipped()
+        .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }

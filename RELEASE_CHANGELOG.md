@@ -1,7 +1,7 @@
-- **有色物品/方块配方彻底修复与顺序优化**：
-  - 彻底清除 `1.21.1.recipe`、`26w14a.recipe`、`26.3.recipe` 中所有空白合成表（包括 `Banner` 旗帜复制空白页、`Bundle` 收纳袋与 `Shulker Box` 潜影盒的 `crafting_transmute` 染色配方等）。
-  - 统一将所有可染色物品/方块（`Bed` 床、`Banner` 旗帜、`Bundle` 收纳袋、`Carpet` 地毯、`Cushion` 坐垫、`Harness` 鞍具、`Wool` 羊毛、`Wool Slab` / `Wool Stairs`、`Shulker Box` 潜影盒等）的**直接合成配方排在第一位（Variant 0）**，**染色合成配方排在第二位（Variant 1）**。
-- **全新多色融合图标（`Any <Family>`）**：
-  - 为每一类可通过染色改变颜色的物品/方块生成保留完整材质细节（如床的白色枕头与木质床腿、旗帜木杆、收纳袋束绳、鞍具皮革与护目镜等）的七彩融合图标（`Any Bed`、`Any Banner`、`Any Bundle`、`Any Carpet`、`Any Cushion`、`Any Wool`、`Any Harness`、`Any Shulker Box`、`Any Candle` 等），直观表示“任意颜色的该物品均可染色”，并支持在原料弹窗中一键跳转基础合成配方。
-- **工作台与熔炉等跨工作站布局滑动零跳跃**：
-  - 统一 `CraftingRecipeCard` 中 3×3 工作台网格与 1×3 熔炉网格的尺寸占位、水平布局与底部状态栏高度（`28pt`），并统一 `UtilityCardView` 首槽位卡片的 3 行高度结构与 `ScrollView` 非惰性 `VStack` 容器，彻底消除从工作台滑向熔炉（或切石机/锻造台）时的高度突变与画面跳跃。
+- **移除 `TabView(.page)`，彻底修复多重 Crafting Utilities 第一页全屏四处拖动 Bug**：
+  - 在 `RecipeDetailView` / `CraftingRecipeCard` 中完全移除 `TabView(.page)`（`UIPageViewController`），消除嵌套横向 `UIScrollView` 在第 0 页（`contentOffset.x == 0`）与 `NavigationStack` 交互手势耦合导致整个页面变成 2D 自由拖动界面的问题。
+  - 新增 `HorizontalPagerGestureBridge` 原生 UIKit 手势桥接器，严格锁定外层 `UIScrollView` 仅垂直滚动（`alwaysBounceHorizontal = false`、`isDirectionalLockEnabled = true`），并在水平滑动时通过 `shouldBeRequiredToFailBy` 独占手势，彻底杜绝斜向漂移与页面脱离。
+- **触控优先（Touch-Priority）、动画中途打断与连续弹簧加速度（Spring Acceleration）**：
+  - 布局与 Crafting Utility 切换在松手瞬间立即提交状态，无需等待上一段动画播完即可随时打断并连续划向下一个或上一个 Utility。
+  - 引入连续滑动连击检测（`consecutiveSwitchStreak`），连续快速滑动时动态提升 `interpolatingSpring` 的刚度（Stiffness）与初速度增益（Initial Velocity Boost），利用 SwiftUI 可叠加弹簧物理模型实现真实的“越滑越快”弹簧式加速度。
+  - 重构 `UtilityCardView` 为零分支切换（消除 `switch` 条件视图销毁与 `.id` 重建），并将额外熔炉卡片过渡改为可逆对称弹簧过渡，使工作台 ↔ 熔炉转化过程 100% 可在中途任意帧平滑反转或继续推进。
