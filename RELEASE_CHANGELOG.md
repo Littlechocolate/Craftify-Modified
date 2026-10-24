@@ -1,0 +1,8 @@
+- **列表与搜索全链路性能优化（120fps 流畅滚动）**：
+  - 预计算 `Recipe` 的 `resolvedVariants`、`craftingUtilities` 与 `allIngredientNames` 并缓存为常量属性，消除每个配方卡片渲染时的重复合并、字符串处理与排序开销，并提供 $O(1)$ 的 `Equatable` / `Hashable` 实现。
+  - 在 `RecipeListView` 与 `RecipeSearchView` 中缓存 `RecipeSectionsLayout` 虚拟化布局与搜索过滤结果，避免滚动位置更新时重复分组、切片或重新过滤全部配方。
+  - 拆分独立的 `Equatable` 视图 `RecipeVirtualizedSectionView` 与 `RecipeVirtualizedRowView`，滚动时未变化的字母分区直接 $O(1)$ 跳过 Diff。
+  - 在 `CraftImageStore` 中新增一级内存字典缓存 `fastImageCache`，移除每个小图标上的 `@ObservedObject` 动态订阅风暴；精简推荐卡片背景修饰器，降低 GPU 离屏合成负载。
+- **右侧 A–Z 索引栏重构与 1:1 零延迟触控**：
+  - 移除字母间的 25 个圆点 `·`，采用清爽紧凑的 26 字母胶囊轨道，移除多层 `Material` 玻璃叠加冲突；按住滑动时右侧轨道微压且全部字母全程保持清晰可见。
+  - 全新水滴形悬浮标 `IndexCalloutView` 直接与轨道共享同一局部坐标系，按下瞬间无动画对齐落点，滑动时悬浮框与内部大字母完全绑定、1:1 零延迟同步移动。

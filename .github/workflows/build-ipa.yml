@@ -194,25 +194,42 @@ jobs:
             test-artifacts/simulator_screenshot.png
           retention-days: 14
 
+      - name: Generate Release Notes
+        if: github.ref == 'refs/heads/main'
+        run: |
+          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          COMMIT_SUBJECT=$(git log -1 --pretty=format:"%s")
+          {
+            echo "### Craftify iOS 标准未签名版 (Build ${{ github.run_number }} · \`${COMMIT_SHORT}\`)"
+            echo ""
+            echo "#### 本次修改内容"
+            if [ -s RELEASE_CHANGELOG.md ]; then
+              cat RELEASE_CHANGELOG.md
+            else
+              echo "- ${COMMIT_SUBJECT}"
+            fi
+            echo ""
+            echo "#### 最近提交记录"
+            git log -n 3 --pretty=format:"- \`%h\` %s"
+            echo ""
+            echo ""
+            echo "#### 版本说明"
+            echo "- **标准规范构建**：产出 100% 标准未加密未签名 iOS IPA。"
+            echo "- **已通过 iOS 18 模拟器实测**：工作流构建过程中自动在 iOS 18 模拟器完成安装与启动测试，验证应用无启动崩溃、无依赖缺失，并附带模拟器启动截图。"
+            echo "- **离线配方与版本独立图标包**：完全基于本地存储，预置 Minecraft 1.21.1、26w14a 与 26.3，按版本独立隔离存储与识别。"
+            echo ""
+            echo "#### 安装说明"
+            echo "- 本包为标准未签名 IPA，可直接使用任意签名工具（LiveContainer、SideStore、AltStore、TrollStore、ESign、Feather 等）进行自签并在 iOS 17 / 18 上正常安装运行。"
+          } > RELEASE_NOTES.md
+          cat RELEASE_NOTES.md
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main'
         with:
           tag_name: "v1.1.0-standard-build-${{ github.run_number }}"
           name: "Craftify v1.1.0 Standard Unsigned (Build ${{ github.run_number }})"
-          body: |
-            ### Craftify iOS 标准未签名版 (Build ${{ github.run_number }})
-
-            **版本说明**：
-            - **标准规范构建**：去除一切刻意针对特定注入容器的非标补丁与假别名，产出 100% 标准未加密未签名 iOS IPA。
-            - **已通过 iOS 18 模拟器实测**：工作流构建过程中自动在 iOS 18 模拟器完成安装与启动测试，验证应用无启动崩溃、无依赖缺失，并附带模拟器启动截图。
-            - **离线配方与版本独立图标包**：完全基于本地存储，预置 Minecraft 1.21.1 (1,290 配方 / 1,444 图标)、26w14a (1,513 配方 / 1,642 图标) 与 26.3 (1,761 配方 / 1,773 图标)，每个 `.recipe` 自动内嵌由 `IsometricRenderer` 渲染的物品栏风格图标，App 内按版本独立隔离存储与识别，避免跨版本图标混淆。
-            - **官方游戏内分类**：遵循 Minecraft Wiki 分类 (建筑方块、装备、红石、食物与烹饪、杂项)。
-            - **版本管理与冲突解决**：支持多版本导入、切换，以及冲突处理 (替换 / 同时保留 / 取消)。
-
-            **安装说明**：
-            - 本包为标准未签名 IPA，可直接使用任意签名工具（LiveContainer、SideStore、AltStore、TrollStore、ESign、Feather、牛蛙助手等）进行自签并在 iOS 17 / 18 上正常安装运行。
-            - 如使用 LiveContainer：长按旧版本删除旧应用后，直接导入 `Craftify.ipa` 或 `Craftify.zip`，LiveContainer 将自动按正常 IPA 规则完成转换与运行。
+          body_path: RELEASE_NOTES.md
           files: |
             Craftify.ipa
             Craftify.zip

@@ -687,46 +687,6 @@ struct Recipe: Codable, Identifiable, Equatable, Hashable {
 
         return mergedList
     }
-
-    static func == (lhs: Recipe, rhs: Recipe) -> Bool {
-        return lhs.id == rhs.id &&
-               lhs.name == rhs.name &&
-               lhs.image == rhs.image &&
-               lhs.ingredients == rhs.ingredients &&
-               lhs.alternateIngredients == rhs.alternateIngredients &&
-               lhs.alternateIngredients1 == rhs.alternateIngredients1 &&
-               lhs.alternateIngredients2 == rhs.alternateIngredients2 &&
-               lhs.alternateIngredients3 == rhs.alternateIngredients3 &&
-               lhs.output == rhs.output &&
-               lhs.alternateOutput == rhs.alternateOutput &&
-               lhs.alternateOutput1 == rhs.alternateOutput1 &&
-               lhs.alternateOutput2 == rhs.alternateOutput2 &&
-               lhs.alternateOutput3 == rhs.alternateOutput3 &&
-               lhs.category == rhs.category &&
-               lhs.imageremark == rhs.imageremark &&
-               lhs.remarks == rhs.remarks &&
-               lhs.variants == rhs.variants
-    }
-
-    func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(name)
-        hasher.combine(image)
-        hasher.combine(ingredients)
-        hasher.combine(alternateIngredients)
-        hasher.combine(alternateIngredients1)
-        hasher.combine(alternateIngredients2)
-        hasher.combine(alternateIngredients3)
-        hasher.combine(output)
-        hasher.combine(alternateOutput)
-        hasher.combine(alternateOutput1)
-        hasher.combine(alternateOutput2)
-        hasher.combine(alternateOutput3)
-        hasher.combine(category)
-        hasher.combine(imageremark)
-        hasher.combine(remarks)
-        hasher.combine(variants)
-    }
 }
 
 /// A user-created, iCloud-synced collection of crafting recipes.

@@ -440,7 +440,7 @@ private struct RecipeVirtualizedRowView: View, Equatable {
     let isSingleColumn: Bool
     let rowHeight: CGFloat
 
-    static func == (lhs: RecipeVirtualizedRowView, rhs: RecipeVirtualizedRowView) -> Bool {
+    nonisolated static func == (lhs: RecipeVirtualizedRowView, rhs: RecipeVirtualizedRowView) -> Bool {
         lhs.rowIndex == rhs.rowIndex
             && lhs.isSingleColumn == rhs.isSingleColumn
             && lhs.rowHeight == rhs.rowHeight
@@ -486,7 +486,7 @@ private struct RecipeVirtualizedSectionView: View, Equatable {
     let isSingleColumn: Bool
     let accent: Color
 
-    static func == (lhs: RecipeVirtualizedSectionView, rhs: RecipeVirtualizedSectionView) -> Bool {
+    nonisolated static func == (lhs: RecipeVirtualizedSectionView, rhs: RecipeVirtualizedSectionView) -> Bool {
         lhs.section.id == rhs.section.id
             && lhs.visibleRange == rhs.visibleRange
             && lhs.rowHeight == rhs.rowHeight
@@ -778,7 +778,7 @@ private struct IndexBarStaticTrack: View, Equatable {
     let accent: Color
     let letterHeight: CGFloat
 
-    static func == (lhs: IndexBarStaticTrack, rhs: IndexBarStaticTrack) -> Bool {
+    nonisolated static func == (lhs: IndexBarStaticTrack, rhs: IndexBarStaticTrack) -> Bool {
         lhs.availableLetters == rhs.availableLetters
             && lhs.letterHeight == rhs.letterHeight
             && lhs.accent == rhs.accent
@@ -827,7 +827,7 @@ private struct IndexCalloutView: View {
                 .fill(Color(uiColor: .secondarySystemGroupedBackground))
                 .overlay(
                     IndexCalloutShape()
-                        .strokeBorder(accent.opacity(0.28), lineWidth: 1)
+                        .stroke(accent.opacity(0.28), lineWidth: 1)
                 )
                 .shadow(color: Color.black.opacity(0.16), radius: 8, x: -2, y: 3)
 
