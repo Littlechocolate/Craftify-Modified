@@ -1,7 +1,3 @@
-- **移除 `TabView(.page)`，彻底修复多重 Crafting Utilities 第一页全屏四处拖动 Bug**：
-  - 在 `RecipeDetailView` / `CraftingRecipeCard` 中完全移除 `TabView(.page)`（`UIPageViewController`），消除嵌套横向 `UIScrollView` 在第 0 页（`contentOffset.x == 0`）与 `NavigationStack` 交互手势耦合导致整个页面变成 2D 自由拖动界面的问题。
-  - 新增 `HorizontalPagerGestureBridge` 原生 UIKit 手势桥接器，严格锁定外层 `UIScrollView` 仅垂直滚动（`alwaysBounceHorizontal = false`、`isDirectionalLockEnabled = true`），并在水平滑动时通过 `shouldBeRequiredToFailBy` 独占手势，彻底杜绝斜向漂移与页面脱离。
-- **触控优先（Touch-Priority）、动画中途打断与连续弹簧加速度（Spring Acceleration）**：
-  - 布局与 Crafting Utility 切换在松手瞬间立即提交状态，无需等待上一段动画播完即可随时打断并连续划向下一个或上一个 Utility。
-  - 引入连续滑动连击检测（`consecutiveSwitchStreak`），连续快速滑动时动态提升 `interpolatingSpring` 的刚度（Stiffness）与初速度增益（Initial Velocity Boost），利用 SwiftUI 可叠加弹簧物理模型实现真实的“越滑越快”弹簧式加速度。
-  - 重构 `UtilityCardView` 为零分支切换（消除 `switch` 条件视图销毁与 `.id` 重建），并将额外熔炉卡片过渡改为可逆对称弹簧过渡，使工作台 ↔ 熔炉转化过程 100% 可在中途任意帧平滑反转或继续推进。
+- **移除嵌入式 GitHub Token 与 API 依赖，全面接入原生 `gh` CLI**：
+  - 清理本地 `.git/config` 中包含的远程个人访问令牌（PAT），切回干净的标准 HTTPS 远程仓库地址并由系统钥匙串与 `gh` 凭据助手托管。
+  - 项目规则与 CI 守护全面升级为直接执行原生 `gh` 命令（如 `gh repo view`、`gh run list`、`gh run view --log-failed`、`gh release view`），杜绝直接通过 `curl` 调用底层 GitHub API。
